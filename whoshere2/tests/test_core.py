@@ -1,0 +1,217 @@
+import time
+
+import pytest
+
+from whoshere import presence
+from whoshere.db import Database
+from whoshere.importer import import_v1, parse_v1
+from whoshere.macutil import is_randomized, normalize_mac
+from whoshere.unifi import ClientInfo, IntegrationClient, NetDevice, SessionClient, Snapshot, UniFiError
+
+from mock_unifi import serve
+
+AP1, AP2 = "b7:c5:21:08:82:32", "b6:98:4e:f7:a1:ca"
+PHONE = "90:83:3e:7d:d3:6b"
+GRACE = 600
+
+
+@pytest.fixture
+def db(tmp_path):
+    return Database(tmp_path / "t.db")
+
+
+def add_person(db, name, *macs):
+    pid = db.run("INSERT INTO people (name, created_at) VALUES (?, ?)", (name, time.time()))
+    for m in macs:
+        db.run("INSERT INTO devices (mac, person_id) VALUES (?, ?)", (m, pid))
+    return pid
+
+
+def snap(online: dict, t: float):
+    return Snapshot(
+        clients=[ClientInfo(mac=m, name="phone", uplink_mac=ap) for m, ap in online.items()],
+        devices=[NetDevice(AP1, "Sound Booth", "ap"), NetDevice(AP2, "Bullpen", "ap")],
+        taken_at=t)
+
+
+def events(db):
+    return [(r["kind"], r["at"]) for r in db.all("SELECT kind, at FROM events ORDER BY id")]
+
+
+# ---------------------------------------------------------------- MACs
+
+def test_normalize_mac():
+    assert normalize_mac("90-83-3E-7D-D3-6B") == PHONE
+    assert normalize_mac("9083.3e7d.d36b") == PHONE
+    assert normalize_mac("90833e7dd36b") == PHONE
+    assert normalize_mac("nope") is None
+    assert normalize_mac("") is None
+
+
+def test_randomized_detection():
+    assert is_randomized("da:11:22:33:44:55")  # 'a' -> locally administered
+    assert is_randomized("02:00:00:00:00:00")
+    assert not is_randomized(PHONE)
+
+
+# ---------------------------------------------------------------- presence rules
+
+def test_arrival_then_departure_after_grace(db):
+    pid = add_person(db, "Steve", PHONE)
+    t0 = 1_000_000.0
+    presence.apply_snapshot(db, snap({}, t0), GRACE)
+    assert db.one("SELECT state FROM presence")["state"] == "away"
+
+    presence.apply_snapshot(db, snap({PHONE: AP1}, t0 + 60), GRACE)
+    b = presence.board(db, stale_after=300, now=t0 + 61)
+    assert b["verdict"] == "occupied"
+    assert b["here"][0]["location"] == "Sound Booth"
+    assert events(db) == [("arrive", t0 + 60)]
+
+    # Phone sleeps for 5 minutes: still here, flagged as maybe leaving, no event
+    presence.apply_snapshot(db, snap({}, t0 + 120), GRACE)
+    presence.apply_snapshot(db, snap({}, t0 + 420), GRACE)
+    b = presence.board(db, stale_after=300, now=t0 + 421)
+    assert b["verdict"] == "occupied" and b["here"][0]["leaving"]
+    presence.apply_snapshot(db, snap({PHONE: AP2}, t0 + 480), GRACE)  # back, roamed to Bullpen
+    b = presence.board(db, stale_after=300, now=t0 + 481)
+    assert b["here"][0]["location"] == "Bullpen" and not b["here"][0]["leaving"]
+    assert len(events(db)) == 1
+
+    # Really leaves: departure is recorded at last-seen time once grace passes
+    presence.apply_snapshot(db, snap({}, t0 + 540), GRACE)
+    presence.apply_snapshot(db, snap({}, t0 + 540 + GRACE - 1), GRACE)
+    assert len(events(db)) == 1
+    presence.apply_snapshot(db, snap({}, t0 + 540 + GRACE), GRACE)
+    assert events(db)[-1] == ("depart", t0 + 480)
+    assert presence.board(db, 300, now=t0 + 540 + GRACE + 1)["verdict"] == "clear"
+
+
+def test_outage_does_not_count_as_absence(db):
+    add_person(db, "Steve", PHONE)
+    t0 = 2_000_000.0
+    presence.apply_snapshot(db, snap({PHONE: AP1}, t0), GRACE)
+    # UniFi unreachable for an hour; the next good poll happens to miss the dozing phone
+    presence.apply_snapshot(db, snap({}, t0 + 3600), GRACE)
+    assert db.one("SELECT state FROM presence")["state"] == "here"
+    assert events(db) == []
+
+
+def test_stale_data_never_says_all_clear(db):
+    add_person(db, "Steve", PHONE)
+    t0 = 3_000_000.0
+    presence.apply_snapshot(db, snap({}, t0), GRACE)
+    assert presence.board(db, stale_after=180, now=t0 + 60)["verdict"] == "clear"
+    assert presence.board(db, stale_after=180, now=t0 + 181)["verdict"] == "stale"
+    presence.record_failure(db, "boom", now=t0 + 200)
+    b = presence.board(db, stale_after=180, now=t0 + 201)
+    assert b["verdict"] == "stale" and b["last_error"] == "boom"
+
+
+def test_unknown_ap_still_counts_as_here(db):
+    add_person(db, "Steve", PHONE)
+    presence.apply_snapshot(db, snap({PHONE: "11:22:33:44:55:66"}, 4_000_000.0), GRACE)
+    b = presence.board(db, 300, now=4_000_001.0)
+    assert b["verdict"] == "occupied" and b["here"][0]["location"] == "Unknown location"
+
+
+def test_untracked_people_reported_but_not_blocking(db):
+    add_person(db, "No Phone")
+    presence.apply_snapshot(db, snap({}, 5_000_000.0), GRACE)
+    b = presence.board(db, 300, now=5_000_001.0)
+    assert b["verdict"] == "clear" and [p["name"] for p in b["untracked"]] == ["No Phone"]
+
+
+def test_alias_overrides_unifi_name(db):
+    add_person(db, "Steve", PHONE)
+    presence.apply_snapshot(db, snap({PHONE: AP1}, 6_000_000.0), GRACE)
+    db.run("UPDATE locations SET alias = 'Booth' WHERE mac = ?", (AP1,))
+    assert presence.board(db, 300, now=6_000_001.0)["here"][0]["location"] == "Booth"
+
+
+def test_catalog_records_all_clients(db):
+    presence.apply_snapshot(db, snap({PHONE: AP1, "aa:aa:aa:aa:aa:aa": AP2}, 7_000_000.0), GRACE)
+    presence.apply_snapshot(db, snap({PHONE: AP1}, 7_000_060.0), GRACE)
+    rows = {r["mac"]: r["connected"] for r in db.all("SELECT mac, connected FROM devices")}
+    assert rows == {PHONE: 1, "aa:aa:aa:aa:aa:aa": 0}
+
+
+def test_prune_keeps_assigned_devices(db):
+    add_person(db, "Steve", PHONE)
+    old = time.time() - 90 * 86400
+    presence.apply_snapshot(db, snap({PHONE: AP1, "aa:aa:aa:aa:aa:aa": AP2}, old), GRACE)
+    presence.apply_snapshot(db, snap({}, old + 60), GRACE)
+    presence.prune(db, history_days=30, device_retention_days=30)
+    assert [r["mac"] for r in db.all("SELECT mac FROM devices")] == [PHONE]
+    assert db.all("SELECT * FROM events") == []
+
+
+# ---------------------------------------------------------------- v1 import
+
+def test_import_v1(db):
+    text = "Steve Marcus  90:83:3e:7d:d3:6b\nDavid Wells\t28-DE-CF-88-F7-A2\n\nbad line\nJenny Nitzel  09:51:dc:e1:33:cf\n"
+    entries, problems = parse_v1(text)
+    assert len(entries) == 3 and len(problems) == 1
+    added, assigned, _ = import_v1(db, text)
+    assert (added, assigned) == (3, 3)
+    added, assigned, _ = import_v1(db, text)  # idempotent
+    assert added == 0
+    assert db.one("SELECT COUNT(*) AS n FROM people")["n"] == 3
+
+
+# ---------------------------------------------------------------- UniFi clients against the mock
+
+@pytest.fixture(scope="module")
+def mock():
+    import urllib.request, json
+    srv = serve(0)
+    port = srv.server_address[1]
+    def set_online(d):
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/_mock/online", data=json.dumps(d).encode(), method="POST")
+        urllib.request.urlopen(req).read()
+    yield f"http://127.0.0.1:{port}", set_online
+    srv.shutdown()
+
+
+def test_integration_client(mock):
+    url, set_online = mock
+    set_online({PHONE: AP1, "3c:22:fb:10:20:30": "0c:ea:14:00:00:01"})
+    s = IntegrationClient(url, "test-key", "default", False).snapshot()
+    by = {c.mac: c for c in s.clients}
+    assert set(by) == {PHONE, "3c:22:fb:10:20:30"}  # VPN client without MAC skipped
+    assert by[PHONE].uplink_mac == AP1 and by[PHONE].name == "Alexs-iPhone"
+    assert by["3c:22:fb:10:20:30"].wired
+    assert {d.name for d in s.devices} >= {"Sound Booth", "Office Switch"}
+
+
+def test_integration_bad_key(mock):
+    url, _ = mock
+    with pytest.raises(UniFiError, match="API key"):
+        IntegrationClient(url, "wrong", "default", False).snapshot()
+
+
+def test_integration_unknown_site(mock):
+    url, _ = mock
+    with pytest.raises(UniFiError, match="Sites this key can see"):
+        IntegrationClient(url, "test-key", "campus2", False).snapshot()
+
+
+def test_session_client(mock):
+    url, set_online = mock
+    set_online({PHONE: AP2})
+    c = SessionClient(url, "whoshere", "secret", "default", False)
+    s = c.snapshot()
+    assert [(x.mac, x.uplink_mac, x.name) for x in s.clients] == [(PHONE, AP2, "Alexs-iPhone")]
+    c.csrf = "stale"  # simulate expired session -> re-login transparently
+    assert len(c.snapshot().clients) == 1
+
+
+def test_session_bad_password(mock):
+    url, _ = mock
+    with pytest.raises(UniFiError, match="login failed"):
+        SessionClient(url, "whoshere", "nope", "default", False).snapshot()
+
+
+def test_unreachable():
+    with pytest.raises(UniFiError, match="Can't reach"):
+        IntegrationClient("http://127.0.0.1:9", "k", "default", False).snapshot()

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+{% if b.verdict == 'clear' %}
+  <section class="verdict clear">
+    <div class="big">All clear to arm</div>
+    <div class="sub">No tracked staff are on campus.</div>
+  </section>
+{% elif b.verdict == 'occupied' %}
+  <section class="verdict occupied">
+    <div class="big">Not clear — {{ b.here|length }} on campus</div>
+    <ul class="who">
+      {% for p in b.here %}
+        <li><strong>{{ p.name }}</strong>
+          {% if p.location %}<span class="chip">{{ p.location }}</span>{% endif %}
+          {% if p.leaving %}<span class="chip ghost">not seen for {{ p.last_seen|ago|replace(' ago','') }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% else %}
+  <section class="verdict stale">
+    <div class="big">Can't confirm — check manually</div>
+    <div class="sub">
+      {% if b.last_success %}Last good update from UniFi was {{ b.last_success|ago }}.{% else %}No data from UniFi yet.{% endif %}
+      {% if b.last_error %}<br>{{ b.last_error }}{% endif %}
+    </div>
+  </section>
+{% endif %}
+
+{% if b.untracked %}
+  <p class="note">Not tracked (no device assigned): {% for p in b.untracked %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% endif %}
+
+<table class="board">
+  <thead><tr><th>Person</th><th>Status</th><th>Where</th><th>When</th></tr></thead>
+  <tbody>
+  {% for p in b.people if p.state != 'untracked' %}
+    <tr>
+      <td class="name">{{ p.name }}</td>
+      {% if p.state == 'here' %}
+        <td><span class="pill here">{% if p.leaving %}Here?{% else %}Here{% endif %}</span></td>
+        <td>{{ p.location or '—' }}</td>
+        <td class="muted">{% if p.leaving %}last seen {{ p.last_seen|ago }}{% elif p.since %}since {{ p.since|when }}{% else %}seen {{ p.last_seen|ago }}{% endif %}</td>
+      {% elif p.state == 'unknown' %}
+        <td><span class="pill unknown">Checking…</span></td><td>—</td><td class="muted">waiting for first update</td>
+      {% else %}
+        <td><span class="pill away">Not here</span></td>
+        <td>—</td>
+        <td class="muted">{% if p.last_seen %}left {{ p.last_seen|when }}{% else %}never seen{% endif %}</td>
+      {% endif %}
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">Nobody is set up yet.{% if admin_enabled %} <a href="/admin/people">Add people</a>.{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="updated">Updated {{ b.generated_at|clock }}{% if b.last_success %} · UniFi data from {{ b.last_success|ago }}{% endif %} · refreshes every 30 seconds</p>
+{% endblock %}

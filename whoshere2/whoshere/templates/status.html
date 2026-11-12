@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Status · {{ title }}{% endblock %}
+{% block content %}
+<h1>Status</h1>
+<div class="card">
+  {% if failing %}
+    <div class="flash error">Last poll failed: {{ st.last_error }}</div>
+  {% elif st.last_success %}
+    <div class="flash ok">Connected to UniFi. Last poll {{ st.last_success|ago }} ({{ st.client_count }} clients online).</div>
+  {% else %}
+    <div class="flash warn">No successful poll yet.</div>
+  {% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button>Poll UniFi now</button>
+  </form>
+</div>
+
+<table class="list kv">
+  <tr><th>UniFi address</th><td class="mono">{{ s.unifi_url or 'not set' }}</td></tr>
+  <tr><th>Sign-in method</th><td>{{ {'api_key':'API key','password':'Username & password','none':'Not configured'}[s.auth_mode] }}</td></tr>
+  <tr><th>Site</th><td>{{ s.unifi_site }}</td></tr>
+  <tr><th>Checks UniFi every</th><td>{{ s.poll_interval }} seconds</td></tr>
+  <tr><th>Counts as left after</th><td>{{ s.departure_grace // 60 }} minutes unseen</td></tr>
+  <tr><th>Board says "can't confirm" after</th><td>{{ s.stale_after // 60 }} minutes without data</td></tr>
+  <tr><th>Last attempt</th><td>{{ st.last_attempt|when }}</td></tr>
+  <tr><th>Last success</th><td>{{ st.last_success|when }}</td></tr>
+  <tr><th>People on board</th><td>{{ counts.people }}</td></tr>
+  <tr><th>Tracked devices</th><td>{{ counts.tracked }} of {{ counts.known }} known</td></tr>
+  <tr><th>Locations</th><td>{{ counts.locations }}</td></tr>
+  <tr><th>History events kept</th><td>{{ counts.events }} (last {{ s.history_days }} days)</td></tr>
+</table>
+{% endblock %}

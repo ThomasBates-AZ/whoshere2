@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ person.name }} · {{ title }}{% endblock %}
+{% block content %}
+<p><a href="/admin/people">← People</a></p>
+<h1>{{ person.name }}{% if not person.active %} <span class="chip ghost">hidden from board</span>{% endif %}</h1>
+
+<div class="grid2">
+  <form method="post" class="card inline">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="rename">
+    <input name="name" value="{{ person.name }}" required>
+    <button>Rename</button>
+  </form>
+  <div class="card inline">
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="action" value="toggle">
+      <button class="secondary">{% if person.active %}Hide from board{% else %}Show on board{% endif %}</button>
+    </form>
+    <form method="post" onsubmit="return confirm({{ ('Delete ' ~ person.name ~ ' and all of their history?')|tojson|forceescape }})">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="action" value="delete">
+      <button class="danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<h2>Devices</h2>
+<table class="list">
+  <thead><tr><th>Device</th><th>MAC</th><th>Seen</th><th></th></tr></thead>
+  <tbody>
+  {% for d in devices %}
+    <tr>
+      <td>{{ d.client_name or 'Unnamed device' }}</td>
+      <td class="mono">{{ d.mac }}{% if is_randomized(d.mac) %} <span class="chip warn" title="Private Wi-Fi address: it may change">private</span>{% endif %}</td>
+      <td>{% if d.connected %}<span class="pill here">Online</span> {{ names.get(d.last_uplink, '') }}{% elif d.last_seen %}<span class="muted">{{ d.last_seen|when }}</span>{% else %}<span class="muted">not seen yet</span>{% endif %}</td>
+      <td class="right">
+        <form method="post">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="action" value="unassign">
+          <input type="hidden" name="mac" value="{{ d.mac }}">
+          <button class="link">Remove</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">No devices — {{ person.name }} isn't being tracked.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="grid2">
+  <div class="card"><a class="button" href="/admin/devices?for={{ person.id }}">Pick from devices UniFi has seen</a></div>
+  <form method="post" class="card inline">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="add_mac">
+    <input name="mac" placeholder="aa:bb:cc:dd:ee:ff" class="mono" required>
+    <button class="secondary">Add by MAC</button>
+  </form>
+</div>
+
+<h2>Recent activity</h2>
+<table class="list">
+  {% for e in events %}
+    <tr><td class="time">{{ e.at|when }}</td>
+      <td>{% if e.kind == 'arrive' %}<span class="pill here">Arrived</span>{% else %}<span class="pill away">Left</span>{% endif %}</td>
+      <td class="muted">{{ names.get(e.uplink, '') if e.uplink else '' }}</td></tr>
+  {% else %}
+    <tr><td class="empty">Nothing yet.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% if refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif %}
+  <title>{% block title %}{{ title }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">{{ title }}</a>
+  <nav>
+    <a href="/" {% if path == '/' %}class="on"{% endif %}>Board</a>
+    <a href="/history" {% if path == '/history' %}class="on"{% endif %}>History</a>
+    {% if role == 'admin' %}
+      <a href="/admin/people" {% if path.startswith('/admin/people') %}class="on"{% endif %}>People</a>
+      <a href="/admin/devices" {% if path.startswith('/admin/devices') %}class="on"{% endif %}>Devices</a>
+      <a href="/admin/locations" {% if path.startswith('/admin/locations') %}class="on"{% endif %}>Locations</a>
+      <a href="/admin/status" {% if path.startswith('/admin/status') %}class="on"{% endif %}>Status</a>
+    {% endif %}
+    {% if role %}<a href="/logout" class="quiet">Sign out</a>
+    {% elif admin_enabled %}<a href="/login?next=/admin/people" class="quiet">Admin</a>{% endif %}
+  </nav>
+</header>
+<main>
+  {% for kind, msg in flashes %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<footer>Who's Here? {{ version }} · originally by Thomas Bates · GPL-3.0</footer>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Devices · {{ title }}{% endblock %}
+{% block content %}
+<h1>Devices</h1>
+{% if for_person %}
+  <div class="flash info">Choosing a device for <strong>{{ for_person.name }}</strong>. Likely matches are listed first. Tip: have them open Settings → Wi-Fi on their phone to see its name, or connect to Wi-Fi now so it shows as online.</div>
+{% else %}
+  <p class="muted">Every device UniFi has reported. Assign a phone to a person to start tracking them. Names come from UniFi (the device's hostname or the alias set in UniFi).</p>
+{% endif %}
+
+<form class="filters" method="get">
+  {% if for_person %}<input type="hidden" name="for" value="{{ for_person.id }}">{% endif %}
+  <input name="q" value="{{ q }}" placeholder="Search name or MAC">
+  <select name="show" onchange="this.form.submit()">
+    {% for v, label in [('unassigned','Unassigned'),('assigned','Assigned'),('all','All'),('ignored','Ignored')] %}
+      <option value="{{ v }}" {% if show == v %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button class="secondary">Search</button>
+</form>
+
+<table class="list devices">
+  <thead><tr><th>Device</th><th>MAC</th><th>Seen</th><th>Belongs to</th><th></th></tr></thead>
+  <tbody>
+  {% for d in devices %}
+    <tr>
+      <td>{{ d.client_name or 'Unnamed device' }}</td>
+      <td class="mono">{{ d.mac }}{% if is_randomized(d.mac) %} <span class="chip warn" title="Private Wi-Fi address: phones change these. Turn off Private Wi-Fi Address on the phone for this network before assigning.">private</span>{% endif %}</td>
+      <td>{% if d.connected %}<span class="pill here">Online</span> <span class="muted">{{ names.get(d.last_uplink, '') }}</span>{% elif d.last_seen %}<span class="muted">{{ d.last_seen|when }}</span>{% else %}<span class="muted">not seen yet</span>{% endif %}</td>
+      <td>
+        <form method="post" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="action" value="assign">
+          <input type="hidden" name="mac" value="{{ d.mac }}">
+          <input type="hidden" name="return" value="{{ return_url }}">
+          {% set preselect = d.person_id or (for_person.id if for_person else (d.suggest.id if d.suggest else None)) %}
+          <select name="person_id">
+            <option value="">— nobody —</option>
+            {% for p in people %}<option value="{{ p.id }}" {% if preselect == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+          </select>
+          <button class="{% if d.person_id %}secondary{% endif %}">{% if d.person_id %}Change{% else %}Assign{% endif %}</button>
+        </form>
+        {% if d.suggest and not d.person_id %}<div class="hint">Looks like {{ d.suggest.name }}'s</div>{% endif %}
+      </td>
+      <td class="right">
+        {% if not d.person_id %}
+        <form method="post">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="action" value="{{ 'unignore' if d.ignored else 'ignore' }}">
+          <input type="hidden" name="mac" value="{{ d.mac }}">
+          <input type="hidden" name="return" value="{{ return_url }}">
+          <button class="link" title="Hide this device from the Unassigned list">{{ 'Unhide' if d.ignored else 'Hide' }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No devices match. If this is a fresh install, wait for the first poll (see Status).</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if devices|length >= 500 %}<p class="note">Showing the first 500. Search to narrow it down.</p>{% endif %}
+{% endblock %}

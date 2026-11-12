@@ -1,0 +1,15 @@
+services:
+  whoshere:
+    build: .
+    # Or, to skip building on the NAS, use the image published by GitHub Actions:
+    # image: ghcr.io/batesta/whoshere2:latest
+    container_name: whoshere
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8085:8080"   # open http://<your-nas>:8085
+    volumes:
+      - whoshere-data:/data
+
+volumes:
+  whoshere-data:

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Locations · {{ title }}{% endblock %}
+{% block content %}
+<h1>Locations</h1>
+<p class="muted">Access points and switches come from UniFi automatically, using the names you gave them in UniFi. New ones show up on their own, so nobody disappears from the board because of a new AP. Add a display name here only if you want the board to say something different.</p>
+<table class="list">
+  <thead><tr><th>UniFi name</th><th>Type</th><th>MAC</th><th>Online now</th><th>Show on board as</th></tr></thead>
+  <tbody>
+  {% for l in locations %}
+    <tr>
+      <td>{{ l.name }}</td>
+      <td class="muted">{{ {'ap':'Access point','switch':'Switch'}.get(l.kind, l.kind or '—') }}</td>
+      <td class="mono">{{ l.mac }}</td>
+      <td>{{ l.clients }}</td>
+      <td>
+        <form method="post" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="mac" value="{{ l.mac }}">
+          <input name="alias" value="{{ l.alias or '' }}" placeholder="{{ l.name }}">
+          <button class="secondary">Save</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">Nothing yet — locations appear after the first successful poll.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

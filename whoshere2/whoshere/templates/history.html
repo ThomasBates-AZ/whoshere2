@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}History · {{ title }}{% endblock %}
+{% block content %}
+<h1>Arrivals &amp; departures</h1>
+<form class="filters" method="get">
+  <select name="person" onchange="this.form.submit()">
+    <option value="">Everyone</option>
+    {% for p in people %}<option value="{{ p.id }}" {% if person == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+  </select>
+  <select name="days" onchange="this.form.submit()">
+    {% for d, label in [(1,'Last 24 hours'),(7,'Last 7 days'),(30,'Last 30 days'),(90,'Last 90 days'),(365,'Last year')] %}
+      <option value="{{ d }}" {% if days == d %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button>Show</button></noscript>
+</form>
+
+{% for label, events in grouped %}
+  <h2 class="day">{{ label }}</h2>
+  <table class="list">
+    {% for e in events %}
+    <tr>
+      <td class="time">{{ e.at|clock }}</td>
+      <td class="name">{{ e.name }}</td>
+      {% if e.kind == 'arrive' %}
+        <td><span class="pill here">Arrived</span></td><td>{{ e.location or '' }}</td>
+      {% else %}
+        <td><span class="pill away">Left</span></td><td class="muted">{% if e.location %}last seen at {{ e.location }}{% endif %}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+{% else %}
+  <p class="empty">No arrivals or departures in this period.</p>
+{% endfor %}
+{% if truncated %}<p class="note">Showing the most recent 2,000 events. Narrow the filter to see more.</p>{% endif %}
+<p class="note">Departures are recorded at the time the person's device was last seen.</p>
+{% endblock %}
