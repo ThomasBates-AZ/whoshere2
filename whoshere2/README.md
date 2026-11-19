@@ -142,6 +142,13 @@ Python 3.13, Starlette, Jinja2 and SQLite; no JavaScript build step. The code is
 - `presence.py` holds the rules above.
 - `web.py` is the UI.
 
+## Releasing a change
+
+Every change bumps the version: the minor number (2.1 → 2.2) for small and most changes, the major number (2.x → 3.0) for big ones.
+
+1. Set `__version__` in `whoshere/__init__.py`.
+2. Add an entry at the top of `whoshere/changelog.py` listing what changed. It appears under **Revision history** in every page's footer. A test fails if the two don't match.
+
 ## License
 
 GPL-3.0, same as v1. By Thomas Bates.

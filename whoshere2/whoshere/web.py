@@ -20,6 +20,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
 from . import __version__, presence
+from .changelog import CHANGELOG
 from .config import Settings
 from .db import Database
 from .importer import import_v1
@@ -81,7 +82,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     poller = Poller(settings, db)
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.filters.update(make_filters(settings.timezone))
-    templates.env.globals.update(title=settings.title, version=__version__,
+    templates.env.globals.update(title=settings.title, version=__version__, changelog=CHANGELOG,
                                  is_randomized=is_randomized, self_register=settings.self_register,
                                  staff_wifi=settings.staff_wifi)
 

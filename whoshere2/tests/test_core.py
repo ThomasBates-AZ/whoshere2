@@ -300,3 +300,10 @@ def test_register_page_flow(mock, tmp_path, monkeypatch):
 def db_people(settings):
     return [(r["name"], r["mac"]) for r in Database(settings.db_path).all(
         "SELECT p.name, d.mac FROM people p JOIN devices d ON d.person_id = p.id ORDER BY d.mac")]
+
+
+def test_changelog_matches_version():
+    from whoshere import __version__
+    from whoshere.changelog import CHANGELOG
+    assert CHANGELOG[0]["version"] == __version__, "add a CHANGELOG entry for the new version"
+    assert all(c["changes"] for c in CHANGELOG)
