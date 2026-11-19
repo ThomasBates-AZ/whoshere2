@@ -11,6 +11,9 @@
   --red-bg: #fde8e6;
   --amber: #9a5b00;
   --amber-bg: #fff3d6;
+  --yellow: #7a5a00;
+  --yellow-bg: #fff2a8;
+  --yellow-line: #f0d84a;
   --blue-bg: #e8f0fd;
   --radius: 10px;
 }
@@ -76,10 +79,12 @@ tr.inactive td { opacity: .55; }
 
 .pill { display: inline-block; padding: .15rem .6rem; border-radius: 999px; font-size: .85rem; font-weight: 700; white-space: nowrap; }
 .pill.here { background: var(--green-bg); color: var(--green); }
+.pill.leaving { background: var(--yellow-bg); color: var(--yellow); box-shadow: inset 0 0 0 1px var(--yellow-line); }
 .pill.away { background: #eeedeb; color: var(--muted); }
 .pill.unknown { background: var(--amber-bg); color: var(--amber); }
 .chip { display: inline-block; padding: .05rem .5rem; border-radius: 6px; font-size: .85rem; background: #fff; border: 1px solid var(--line); color: var(--ink); font-weight: 500; }
 .chip.ghost { background: transparent; color: var(--muted); }
+.chip.leaving { background: var(--yellow-bg); border-color: var(--yellow-line); color: var(--yellow); }
 .chip.warn { background: var(--amber-bg); border-color: #f0d38a; color: var(--amber); font-family: system-ui, sans-serif; }
 .warn-text { color: var(--amber); }
 .hint { font-size: .8rem; color: var(--green); margin-top: .2rem; }

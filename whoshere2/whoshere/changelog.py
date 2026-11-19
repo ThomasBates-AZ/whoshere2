@@ -7,6 +7,14 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "2.2.0",
+        "date": "2026-11-19",
+        "changes": [
+            "\"Here?\" (not seen for a few minutes, may be leaving) is now shown in yellow instead of green",
+            "The banner marks those people in yellow too, with when they were last seen",
+        ],
+    },
+    {
         "version": "2.1.0",
         "date": "2026-11-19",
         "changes": [
