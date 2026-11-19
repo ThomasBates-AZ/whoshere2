@@ -10,7 +10,8 @@ The export is a JSON file:
       "locations": [{"mac": "b7:c5:21:08:82:32", "name": "Sound Booth", "alias": "Sanctuary"}],
       "hidden_devices": ["3c:22:fb:10:20:30"],
       "history":   [{"person_id": 1, "kind": "arrive", "at": 1794520674.4,
-                     "location_mac": "b7:c5:21:08:82:32", "device_mac": "90:83:3e:7d:d3:6b"}]
+                     "location_mac": "b7:c5:21:08:82:32", "device_mac": "90:83:3e:7d:d3:6b",
+                     "wifi": "Ironwood Staff"}]
     }
 
 "id"/"person_id" only link history to people inside the file; they are not database ids.
@@ -55,8 +56,8 @@ def export_data(db: Database, include_history: bool = False, tz=None) -> dict:
     if include_history:
         data["history"] = [
             {"person_id": e["person_id"], "kind": e["kind"], "at": e["at"],
-             "location_mac": e["uplink"], "device_mac": e["device_mac"]}
-            for e in db.all("SELECT person_id, kind, at, uplink, device_mac FROM events ORDER BY at")]
+             "location_mac": e["uplink"], "device_mac": e["device_mac"], "wifi": e["ssid"]}
+            for e in db.all("SELECT person_id, kind, at, uplink, device_mac, ssid FROM events ORDER BY at")]
     return data
 
 
@@ -192,9 +193,10 @@ def import_export(db: Database, data: dict, replace: bool = False) -> ImportResu
                                (pid, kind, at)).fetchone()
             if dup:
                 continue
-            conn.execute("INSERT INTO events (person_id, kind, at, uplink, device_mac) VALUES (?, ?, ?, ?, ?)",
+            conn.execute("INSERT INTO events (person_id, kind, at, uplink, device_mac, ssid) "
+                         "VALUES (?, ?, ?, ?, ?, ?)",
                          (pid, kind, at, normalize_mac(e.get("location_mac") or ""),
-                          normalize_mac(e.get("device_mac") or "")))
+                          normalize_mac(e.get("device_mac") or ""), e.get("wifi") or None))
             result.events_added += 1
     return result
 

@@ -23,6 +23,8 @@ class Poller:
         self._wake = asyncio.Event()
         self._lock = asyncio.Lock()
         self._last_prune = 0.0
+        self.ssid_ok: bool | None = None   # None until the first good poll
+        self.ssid_note: str | None = None
 
     def poll_once(self) -> None:
         """Blocking; run in a worker thread."""
@@ -41,6 +43,9 @@ class Poller:
             return
 
         presence.apply_snapshot(self.db, snap, grace=self.settings.departure_grace)
+        if snap.ssid_note and snap.ssid_note != self.ssid_note:
+            log.warning("%s", snap.ssid_note)
+        self.ssid_ok, self.ssid_note = snap.ssid_ok, snap.ssid_note
         log.info("Poll OK: %d clients, %d network devices", len(snap.clients), len(snap.devices))
 
         if time.time() - self._last_prune > PRUNE_EVERY:

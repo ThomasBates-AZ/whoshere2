@@ -33,7 +33,7 @@
     <tr>
       <td>{{ d.client_name or 'Unnamed device' }}</td>
       <td class="mono">{{ d.mac }}{% if is_randomized(d.mac) %} <span class="chip warn" title="Private Wi-Fi address: it may change">private</span>{% endif %}</td>
-      <td>{% if d.connected %}<span class="pill here">Online</span> {{ names.get(d.last_uplink, '') }}{% elif d.last_seen %}<span class="muted">{{ d.last_seen|when }}</span>{% else %}<span class="muted">not seen yet</span>{% endif %}</td>
+      <td>{% if d.connected %}<span class="pill here">Online</span> {{ names.get(d.last_uplink, '') }}{% if show_wifi and d.last_ssid %} <span class="wifi">{{ d.last_ssid }}</span>{% endif %}{% elif d.last_seen %}<span class="muted">{{ d.last_seen|when }}</span>{% else %}<span class="muted">not seen yet</span>{% endif %}</td>
       <td class="right">
         <form method="post">
           <input type="hidden" name="csrf" value="{{ csrf }}">

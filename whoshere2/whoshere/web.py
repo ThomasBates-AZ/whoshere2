@@ -86,7 +86,8 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     templates.env.filters.update(make_filters(settings.timezone))
     templates.env.globals.update(title=settings.title, version=__version__, changelog=CHANGELOG,
                                  is_randomized=is_randomized, self_register=settings.self_register,
-                                 staff_wifi=settings.staff_wifi)
+                                 staff_wifi=settings.staff_wifi, show_wifi=settings.show_wifi_network,
+                                 wifi_networks=settings.wifi_networks)
 
     # ----- helpers
 
@@ -140,9 +141,9 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         return JSONResponse({
             "all_clear": state["verdict"] == "clear",
             "verdict": state["verdict"],
-            "on_site": [{"name": p["name"], "location": p["location"], "since": p["since"],
+            "on_site": [{"name": p["name"], "location": p["location"], "wifi": p["wifi"], "since": p["since"],
                          "last_seen": p["last_seen"], "leaving": p["leaving"]} for p in state["here"]],
-            "people": [{k: p[k] for k in ("name", "state", "location", "since", "last_seen")}
+            "people": [{k: p[k] for k in ("name", "state", "location", "wifi", "since", "last_seen")}
                        for p in state["people"]],
             "last_success": state["last_success"],
             "last_error": state["last_error"],
@@ -175,7 +176,8 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
             label = day_filter(e["at"])
             if not grouped or grouped[-1][0] != label:
                 grouped.append((label, []))
-            grouped[-1][1].append({**dict(e), "location": names.get(e["uplink"]) if e["uplink"] else None})
+            grouped[-1][1].append({**dict(e), "location": names.get(e["uplink"]) if e["uplink"] else None,
+                                       "wifi": e["ssid"]})
         people = db.all("SELECT id, name FROM people ORDER BY name COLLATE NOCASE")
         return render(request, "history.html", grouped=grouped, people=people,
                       days=days, person=person, truncated=len(events) >= 2000)
@@ -205,8 +207,10 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
             return render(request, "register.html", step="unifi_error", ip=ip)
         if client is None:
             return render(request, "register.html", step="not_found", ip=ip)
+        if not client.wired and client.ssid and not settings.is_watched_wifi(client.ssid):
+            return render(request, "register.html", step="wrong_wifi", client=client, wifi_here=client.ssid)
         if is_randomized(client.mac):
-            return render(request, "register.html", step="private", client=client)
+            return render(request, "register.html", step="private", client=client, wifi_here=client.ssid)
 
         owner = db.one("SELECT p.id, p.name FROM devices d JOIN people p ON p.id = d.person_id "
                        "WHERE d.mac = ?", (client.mac,))
@@ -417,6 +421,17 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
             where.append("d.person_id IS NOT NULL")
         elif show == "ignored":
             where.append("d.ignored = 1")
+        net = qp.get("net", "staff")
+        net_filtered = bool(settings.wifi_networks) and show == "unassigned" and net != "all" and not q
+        if net_filtered:
+            # Phones last seen on a watched network. If UniFi isn't giving network names,
+            # devices with no known network stay visible rather than vanishing.
+            marks = ",".join("?" * len(settings.wifi_networks))
+            if poller.ssid_ok is False:
+                where.append(f"(d.last_ssid IS NULL OR lower(d.last_ssid) IN ({marks}))")
+            else:
+                where.append(f"lower(d.last_ssid) IN ({marks})")
+            params += [n.lower() for n in settings.wifi_networks]
         if q:
             where.append("(lower(d.client_name) LIKE ? OR d.mac LIKE ? OR lower(p.name) LIKE ?)")
             like = f"%{q.lower()}%"
@@ -440,6 +455,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
                                         not d["connected"]))
 
         return render(request, "devices.html", devices=devices, people=people, show=show, q=q,
+                      net_filtered=net_filtered, net=net,
                       for_person=for_person, names=presence.location_names(db),
                       return_url=str(request.url.path) + ("?" + str(request.url.query) if request.url.query else ""))
 
@@ -485,7 +501,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
                       (SELECT COUNT(*) FROM devices) AS known,
                       (SELECT COUNT(*) FROM locations) AS locations,
                       (SELECT COUNT(*) FROM events) AS events""")
-        return render(request, "status.html", st=st, counts=counts, s=settings,
+        return render(request, "status.html", ssid_ok=poller.ssid_ok, ssid_note=poller.ssid_note, st=st, counts=counts, s=settings,
                       failing=bool(st["last_error"]) and (st["last_attempt"] or 0) > (st["last_success"] or 0))
 
     async def admin_root(request: Request):

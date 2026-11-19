@@ -7,6 +7,17 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "2.5.0",
+        "date": "2026-11-19",
+        "changes": [
+            "Shows which Wi-Fi network each person is on, next to their location on the board, Devices and History (turn off with SHOW_WIFI_NETWORK=false)",
+            "New WIFI_NETWORKS setting for your staff networks: the Devices list hides phones on other networks, such as guest Wi-Fi",
+            "\"Add my phone\" names every staff network, asks phones on a guest network to switch first, and gives private-address steps for the network the phone is on",
+            "Status page shows which networks are watched and whether UniFi is providing network names",
+            "Exports include the Wi-Fi network in history",
+        ],
+    },
+    {
         "version": "2.4.0",
         "date": "2026-11-19",
         "changes": [
