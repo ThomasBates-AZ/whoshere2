@@ -29,6 +29,17 @@
   {% for kind, msg in flashes %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
-<footer>Who's Here? {{ version }} · By Thomas Bates · GPL-3.0</footer>
+<footer>
+  <div>Who's Here? {{ version }} · By Thomas Bates · GPL-3.0</div>
+  <details class="revisions">
+    <summary>Revision history</summary>
+    {% for rel in changelog %}
+      <section>
+        <h3>{{ rel.version }} <span class="muted">· {{ rel.date }}</span></h3>
+        <ul>{% for c in rel.changes %}<li>{{ c }}</li>{% endfor %}</ul>
+      </section>
+    {% endfor %}
+  </details>
+</footer>
 </body>
 </html>
