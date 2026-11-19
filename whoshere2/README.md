@@ -49,6 +49,8 @@ If you can't use an API key, leave it blank and set `UNIFI_USERNAME` / `UNIFI_PA
 4. **Environment variables → Advanced mode**: paste your settings from [`.env.example`](.env.example). At least `UNIFI_URL`, `UNIFI_API_KEY` and `ADMIN_PASSWORD`; anything left out uses its default.
 5. **Deploy the stack**, then open `http://<docker-host>:8085`. The footer shows the version that's running.
 
+**On Synology (or if "Add my phone" can't find phones):** add `NETWORK_MODE=host` to the environment variables. In Docker's default bridge mode, Synology hands the app every connection from Docker's internal address (like `172.17.0.1`) instead of the phone's. Host mode uses the server's own network so the real addresses come through. In host mode the board is on `PORT` (default 8080) rather than `HOST_PORT`, so set `PORT=8085` to keep the same address, or another free port. Docker prints a harmless "published ports are discarded" warning in host mode. The **Status** page flags it when the app is only seeing Docker's internal address.
+
 To update later, open the stack and click **Pull and redeploy** (or let GitOps updates do it).
 
 #### Synology Container Manager or plain Docker Compose
@@ -82,7 +84,7 @@ Set `SELF_REGISTER=true` and staff can open `http://<server>:8085/register` **on
 - If `WIFI_NETWORKS` is set and the phone is on another network (a guest Wi-Fi, say), the page asks them to switch to a staff network first.
 - If the phone is already registered, the page says to whom.
 - Set `REGISTER_CODE` so only people you've told the code can register. Anyone on the staff Wi-Fi can use the page otherwise.
-- The page needs to see the phone's real IP address. Open the app directly by its port, or, if you put a reverse proxy in front of it, set `FORWARDED_ALLOW_IPS` to the proxy's address.
+- The page needs to see the phone's real IP address. On Synology that means `NETWORK_MODE=host` (see [Run it](#2-run-it)). If you put a reverse proxy in front of the app, set `FORWARDED_ALLOW_IPS` to the proxy's address.
 
 A QR code for `/register` on the staff-room wall works well.
 
@@ -143,6 +145,9 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 | `SELF_REGISTER` | `false` | Turn on the `/register` page so staff can add their own phone |
 | `REGISTER_CODE` | | Optional code staff must enter on `/register` |
 | `WIFI_NETWORKS` | | Staff Wi-Fi networks, comma-separated, e.g. `Ironwood Staff, Ironwood Office`. Filters the Devices list and "Add my phone"; doesn't change who counts as here |
+| `NETWORK_MODE` | `bridge` | `host` lets "Add my phone" see phones' real addresses (needed on Synology). The board is then on `PORT` |
+| `HOST_PORT` | `8085` | Port for the board in bridge mode |
+| `PORT` | `8080` | Port the app listens on (the board's port in host mode) |
 | `SHOW_WIFI_NETWORK` | `true` | Show which Wi-Fi network each person and device is on |
 | `STAFF_WIFI_NAME` | names in `WIFI_NETWORKS` | Override the network name used in the "Add my phone" instructions |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Reverse proxies whose `X-Forwarded-For` header is trusted |

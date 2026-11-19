@@ -580,3 +580,20 @@ def test_export_import_keeps_wifi_in_history(db):
     other = Database(db.path + ".2")
     import_text(other, json.dumps(data))
     assert other.one("SELECT ssid FROM events")["ssid"] == "Ironwood Office"
+
+
+# ---------------------------------------------------------------- Docker address check
+
+def test_default_gateway_and_masking(tmp_path):
+    from whoshere.netcheck import default_gateway, masked_by_docker
+    route = tmp_path / "route"
+    route.write_text(
+        "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n"
+        "eth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"
+        "eth0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n")
+    assert default_gateway(str(route)) == "172.17.0.1"
+    assert default_gateway(str(tmp_path / "missing")) is None
+    assert masked_by_docker("172.17.0.1", gateway="172.17.0.1", in_container=True)
+    assert masked_by_docker("::ffff:172.17.0.1", gateway="172.17.0.1", in_container=True)
+    assert not masked_by_docker("192.168.1.50", gateway="172.17.0.1", in_container=True)
+    assert not masked_by_docker("172.17.0.1", gateway="172.17.0.1", in_container=False)

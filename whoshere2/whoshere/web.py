@@ -26,6 +26,7 @@ from .config import Settings
 from .db import Database
 from .backup import ImportError_, export_data, import_text
 from .importer import import_v1
+from .netcheck import masked_by_docker
 from .macutil import is_randomized, normalize_mac
 from .poller import Poller
 from .unifi import UniFiError, find_client_by_ip, make_client
@@ -205,6 +206,10 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         ip = request.client.host if request.client else ""
         if error:
             return render(request, "register.html", step="unifi_error", ip=ip)
+        if client is None and masked_by_docker(ip):
+            log.warning("Add my phone sees every visitor as %s (Docker's gateway), not the phone's own "
+                        "address. Set NETWORK_MODE=host so phones can be recognized.", ip)
+            return render(request, "register.html", step="not_found", ip=ip, masked=True)
         if client is None:
             return render(request, "register.html", step="not_found", ip=ip)
         if not client.wired and client.ssid and not settings.is_watched_wifi(client.ssid):
@@ -501,7 +506,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
                       (SELECT COUNT(*) FROM devices) AS known,
                       (SELECT COUNT(*) FROM locations) AS locations,
                       (SELECT COUNT(*) FROM events) AS events""")
-        return render(request, "status.html", ssid_ok=poller.ssid_ok, ssid_note=poller.ssid_note, st=st, counts=counts, s=settings,
+        return render(request, "status.html", visitor_ip=(request.client.host if request.client else ""), visitor_masked=masked_by_docker(request.client.host if request.client else ""), ssid_ok=poller.ssid_ok, ssid_note=poller.ssid_note, st=st, counts=counts, s=settings,
                       failing=bool(st["last_error"]) and (st["last_attempt"] or 0) > (st["last_success"] or 0))
 
     async def admin_root(request: Request):

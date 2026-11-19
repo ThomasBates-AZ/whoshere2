@@ -16,6 +16,9 @@
   </form>
 </div>
 
+{% if visitor_masked %}
+  <div class="flash error">Who's Here sees your browser as <span class="mono">{{ visitor_ip }}</span>, which is Docker's internal address, not your device's. <strong>Add my phone</strong> can't recognize phones like this. Set <code>NETWORK_MODE=host</code> (and <code>PORT</code> if you want a port other than 8080) in the stack's environment variables and redeploy.</div>
+{% endif %}
 <table class="list kv">
   <tr><th>UniFi address</th><td class="mono">{{ s.unifi_url or 'not set' }}</td></tr>
   <tr><th>Wi-Fi networks watched</th><td>{{ s.wifi_networks|join(', ') if s.wifi_networks else 'All networks' }}</td></tr>
@@ -24,6 +27,7 @@
     {% elif ssid_ok %}Available{% if not s.show_wifi_network %} <span class="muted">(not shown: SHOW_WIFI_NETWORK=false)</span>{% endif %}
     {% else %}<span class="warn-text">Not available</span><div class="note">{{ ssid_note }}</div>{% endif %}
   </td></tr>
+  <tr><th>Your address, as this server sees it</th><td class="mono">{{ visitor_ip or 'unknown' }}{% if visitor_masked %} <span class="warn-text">(Docker's internal address)</span>{% endif %}</td></tr>
   <tr><th>Sign-in method</th><td>{{ {'api_key':'API key','password':'Username & password','none':'Not configured'}[s.auth_mode] }}</td></tr>
   <tr><th>Site</th><td>{{ s.unifi_site }}</td></tr>
   <tr><th>Checks UniFi every</th><td>{{ s.poll_interval }} seconds</td></tr>
