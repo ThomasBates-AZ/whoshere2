@@ -7,6 +7,16 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "2.6.0",
+        "date": "2026-11-19",
+        "changes": [
+            "New NETWORK_MODE setting: set it to host so \"Add my phone\" sees each phone's real address (needed on Synology, where Docker's bridge network hides it)",
+            "PORT sets the board's port in host mode",
+            "Status page shows the address the server sees for your browser, and warns when it's only Docker's internal address",
+            "\"Add my phone\" explains the problem instead of just saying the phone wasn't found",
+        ],
+    },
+    {
         "version": "2.5.0",
         "date": "2026-11-19",
         "changes": [

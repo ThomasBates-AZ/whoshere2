@@ -18,6 +18,9 @@
   <p>Open this page <strong>on the phone you want to add</strong>, while it's connected to
     <strong>{{ staff_wifi }}</strong>. Turn off cellular data if you need to, so the page loads over Wi-Fi.</p>
   <p class="note">Address seen: <span class="mono">{{ ip or 'unknown' }}</span>. If you just connected, wait a minute and try again.</p>
+  {% if masked %}
+    <div class="flash error">The server can't see your phone's address: everyone shows up as <span class="mono">{{ ip }}</span>, Docker's internal address. Please tell an administrator: the container needs <code>NETWORK_MODE=host</code>.</div>
+  {% endif %}
   <p><a class="button" href="/register">Try again</a></p>
 
 {% elif step == 'wrong_wifi' %}

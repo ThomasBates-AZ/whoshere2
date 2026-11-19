@@ -11,8 +11,12 @@ services:
     # image: ghcr.io/thomasbates-az/whoshere2:latest
     container_name: whoshere
     restart: unless-stopped
+    # bridge (default): the board is on HOST_PORT. host: the app uses the server's own network,
+    # so "Add my phone" sees phones' real addresses (needed on Synology); it listens on PORT
+    # and HOST_PORT is ignored.
+    network_mode: ${NETWORK_MODE:-bridge}
     ports:
-      - "${HOST_PORT:-8085}:8080"   # open http://<docker-host>:8085
+      - "${HOST_PORT:-8085}:${PORT:-8080}"   # bridge mode: open http://<docker-host>:8085
     volumes:
       - whoshere-data:/data
     environment:
@@ -38,6 +42,7 @@ services:
       HISTORY_DAYS: ${HISTORY_DAYS:-365}
       DEVICE_RETENTION_DAYS: ${DEVICE_RETENTION_DAYS:-30}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PORT: ${PORT:-8080}
 
 volumes:
   whoshere-data:
