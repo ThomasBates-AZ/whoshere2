@@ -6,6 +6,8 @@ Serves both the Integration API (X-API-KEY: test-key) and the classic
 cookie API (username "whoshere", password "secret"). Change who is online with:
 
     curl -X POST localhost:8443/_mock/online -d '{"aa:bb:...": "ap-mac", ...}'
+
+Clients get the IP 10.0.0.<last MAC byte>; override with POST /_mock/ips '{"aa:bb:...": "127.0.0.1"}'.
 """
 from __future__ import annotations
 
@@ -37,10 +39,15 @@ NAMES = {
 }
 WIRED = {"3c:22:fb:10:20:30"}
 
-STATE = {"online": {}}  # client mac -> AP mac
+STATE = {"online": {}, "ips": {}}  # client mac -> AP mac; client mac -> IP override
 LOCK = threading.Lock()
 SESSION = "sess-123"
 CSRF = "csrf-abc"
+
+
+def ip_for(mac: str) -> str:
+    """Each mock client gets a stable, distinct address: 10.0.0.<last byte of its MAC>."""
+    return STATE["ips"].get(mac) or f"10.0.0.{int(mac[-2:], 16)}"
 
 
 def dev_id_for(ap_mac: str) -> str | None:
@@ -80,6 +87,10 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["online"] = {k.lower(): v.lower() for k, v in self._body().items()}
             return self._send(200, {"ok": True})
+        if path == "/_mock/ips":
+            with LOCK:
+                STATE["ips"] = {k.lower(): v for k, v in self._body().items()}
+            return self._send(200, {"ok": True})
         if path == "/api/auth/login":
             b = self._body()
             if b.get("username") == "whoshere" and b.get("password") == "secret":
@@ -109,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                 clients = [{
                     "type": "WIRED" if mac in WIRED else "WIRELESS",
                     "id": f"c-{mac}", "name": NAMES.get(mac, mac),
-                    "connectedAt": "2026-11-12T15:00:00Z", "ipAddress": "10.0.0.5",
+                    "connectedAt": "2026-11-12T15:00:00Z", "ipAddress": ip_for(mac),
                     "macAddress": mac, "uplinkDeviceId": dev_id_for(ap),
                 } for mac, ap in online.items()]
                 # plus a VPN client without MAC, which must be ignored
@@ -127,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
             if path.endswith("/stat/sta"):
                 data = []
                 for mac, ap in online.items():
-                    row = {"mac": mac, "hostname": NAMES.get(mac, ""), "is_wired": mac in WIRED}
+                    row = {"mac": mac, "hostname": NAMES.get(mac, ""), "is_wired": mac in WIRED, "ip": ip_for(mac)}
                     row["sw_mac" if mac in WIRED else "ap_mac"] = ap
                     data.append(row)
                 return self._send(200, {"meta": {"rc": "ok"}, "data": data})

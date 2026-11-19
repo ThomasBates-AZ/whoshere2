@@ -14,6 +14,7 @@
   <nav>
     <a href="/" {% if path == '/' %}class="on"{% endif %}>Board</a>
     <a href="/history" {% if path == '/history' %}class="on"{% endif %}>History</a>
+    {% if self_register and role != 'admin' %}<a href="/register" {% if path == '/register' %}class="on"{% endif %}>Add my phone</a>{% endif %}
     {% if role == 'admin' %}
       <a href="/admin/people" {% if path.startswith('/admin/people') %}class="on"{% endif %}>People</a>
       <a href="/admin/devices" {% if path.startswith('/admin/devices') %}class="on"{% endif %}>Devices</a>
@@ -28,6 +29,6 @@
   {% for kind, msg in flashes %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
-<footer>Who's Here? {{ version }} · originally by Thomas Bates · GPL-3.0</footer>
+<footer>Who's Here? {{ version }} · By Thomas Bates · GPL-3.0</footer>
 </body>
 </html>

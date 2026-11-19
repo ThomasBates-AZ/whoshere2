@@ -58,6 +58,17 @@ Data (people, devices, history) lives in the `whoshere-data` Docker volume. It s
 
 Each tracked phone must have **Private Wi-Fi Address** (iOS) / **Randomized MAC** (Android) turned off for your network. Otherwise its MAC address changes and the person disappears. Devices using a private address are tagged **private** in the list.
 
+### 4. Let staff add their own phone (optional)
+
+Set `SELF_REGISTER=true` and staff can open `http://<server>:8085/register` **on their phone, while connected to the staff Wi-Fi**. The app asks UniFi which device has that phone's IP address, takes its MAC from UniFi (never from the browser), and adds it under the name they type. Typing a name that's already on the board adds the phone to that person, so a new phone replaces nothing and needs no admin.
+
+- If the phone is using a private Wi-Fi address, the page refuses it and shows iPhone and Android steps for turning that off on `STAFF_WIFI_NAME`.
+- If the phone is already registered, the page says to whom.
+- Set `REGISTER_CODE` so only people you've told the code can register. Anyone on the staff Wi-Fi can use the page otherwise.
+- The page needs to see the phone's real IP address. Open the app directly by its port, or, if you put a reverse proxy in front of it, set `FORWARDED_ALLOW_IPS` to the proxy's address.
+
+A QR code for `/register` on the staff-room wall works well.
+
 ## How it decides
 
 - Someone is **Here** as soon as any of their devices is connected, and their location is the access point it's connected to. If they have both a phone and a laptop, the phone (wireless) wins.
@@ -86,6 +97,10 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 | `STALE_AFTER_SECONDS` | `180` | |
 | `HISTORY_DAYS` | `365` | |
 | `DEVICE_RETENTION_DAYS` | `30` | Forget unassigned (guest) devices after this |
+| `SELF_REGISTER` | `false` | Turn on the `/register` page so staff can add their own phone |
+| `REGISTER_CODE` | | Optional code staff must enter on `/register` |
+| `STAFF_WIFI_NAME` | `the staff Wi-Fi` | Network name used in the instructions, e.g. `Ironwood Staff` |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Reverse proxies whose `X-Forwarded-For` header is trusted |
 
 ## JSON API
 
@@ -129,4 +144,4 @@ Python 3.13, Starlette, Jinja2 and SQLite; no JavaScript build step. The code is
 
 ## License
 
-GPL-3.0, same as v1. Originally written by Thomas Bates.
+GPL-3.0, same as v1. By Thomas Bates.

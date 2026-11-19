@@ -53,7 +53,10 @@ def main(argv: list[str] | None = None) -> int:
     from .web import create_app
     app = create_app(settings)
     uvicorn.run(app, host=os.environ.get("HOST", "0.0.0.0"), port=int(os.environ.get("PORT", "8080")),
-                proxy_headers=True, forwarded_allow_ips="*", log_level="warning")
+                proxy_headers=True, log_level="warning",
+                # Only trust X-Forwarded-For from these addresses. The self-register page
+                # identifies a phone by its IP, so a spoofed header must not be believed.
+                forwarded_allow_ips=os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1"))
     return 0
 
 

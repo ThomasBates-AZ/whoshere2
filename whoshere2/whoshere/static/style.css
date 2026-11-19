@@ -84,6 +84,9 @@ tr.inactive td { opacity: .55; }
 /* forms */
 .card { background: var(--card); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); padding: 1rem; margin: 1rem 0; }
 .card.narrow { max-width: 380px; margin: 3rem auto; }
+.card h2 { margin-top: 0; }
+.card ol { padding-left: 1.25rem; margin: .25rem 0 .75rem; }
+.card ol li { margin-bottom: .3rem; }
 .card label { display: block; margin-bottom: .75rem; font-weight: 600; }
 .card label input { display: block; width: 100%; margin-top: .3rem; }
 .inline { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }

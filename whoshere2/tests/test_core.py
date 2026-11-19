@@ -6,7 +6,8 @@ from whoshere import presence
 from whoshere.db import Database
 from whoshere.importer import import_v1, parse_v1
 from whoshere.macutil import is_randomized, normalize_mac
-from whoshere.unifi import ClientInfo, IntegrationClient, NetDevice, SessionClient, Snapshot, UniFiError
+from whoshere.unifi import (ClientInfo, IntegrationClient, NetDevice, SessionClient, Snapshot, UniFiError,
+                            find_client_by_ip)
 
 from mock_unifi import serve
 
@@ -215,3 +216,87 @@ def test_session_bad_password(mock):
 def test_unreachable():
     with pytest.raises(UniFiError, match="Can't reach"):
         IntegrationClient("http://127.0.0.1:9", "k", "default", False).snapshot()
+
+
+# ---------------------------------------------------------------- self-registration
+
+def test_client_ips_and_lookup(mock):
+    url, set_online = mock
+    set_online({PHONE: AP1, "f0:18:98:aa:bb:cc": AP2})
+    for client in (IntegrationClient(url, "test-key", "default", False),
+                   SessionClient(url, "whoshere", "secret", "default", False)):
+        s = client.snapshot()
+        assert find_client_by_ip(s, "10.0.0.107").mac == PHONE
+        assert find_client_by_ip(s, "::ffff:10.0.0.204").mac == "f0:18:98:aa:bb:cc"
+        assert find_client_by_ip(s, "10.0.0.99") is None
+        assert find_client_by_ip(s, None) is None
+
+
+def test_register_page_flow(mock, tmp_path, monkeypatch):
+    """Runs the real app and walks the self-register page as a phone at 127.0.0.1."""
+    import http.cookiejar, json, re, threading, urllib.parse, urllib.request
+    import uvicorn
+    from whoshere.config import Settings
+    from whoshere.web import create_app
+
+    url, set_online = mock
+    def set_ips(d):
+        req = urllib.request.Request(url + "/_mock/ips", data=json.dumps(d).encode(), method="POST")
+        urllib.request.urlopen(req).read()
+
+    for k, v in {"DATA_DIR": str(tmp_path), "UNIFI_URL": url, "UNIFI_API_KEY": "test-key",
+                 "ADMIN_PASSWORD": "admin", "SELF_REGISTER": "true", "REGISTER_CODE": "ironwood",
+                 "STAFF_WIFI_NAME": "Ironwood Staff"}.items():
+        monkeypatch.setenv(k, v)
+    settings = Settings.from_env()
+    app = create_app(settings, start_poller=False)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    while not server.started:
+        time.sleep(0.05)
+    base = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+    def get():
+        return opener.open(base + "/register").read().decode()
+
+    def post(**fields):
+        page = get()
+        fields["csrf"] = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        return opener.open(base + "/register", data=urllib.parse.urlencode(fields).encode()).read().decode()
+
+    try:
+        private = "da:11:22:33:44:55"
+        set_online({private: AP1})
+        set_ips({private: "127.0.0.1"})
+        assert "private Wi-Fi address" in get() and "Ironwood Staff" in get()
+
+        set_online({PHONE: AP1})
+        set_ips({})
+        assert "wasn't found" in get()
+
+        set_ips({PHONE: "127.0.0.1"})
+        assert "Alexs-iPhone" in get() and "Registration code" in get()
+        assert "That registration code" in post(name="Alex Rivera", code="wrong")
+        assert db_people(settings) == []
+
+        done = post(name="  Alex   Rivera ", code="ironwood")
+        assert "registered to <strong>Alex Rivera</strong>" in done
+        assert db_people(settings) == [("Alex Rivera", PHONE)]
+        assert "already registered to <strong>Alex Rivera</strong>" in get()
+
+        # A second phone with the same name (any case) joins the existing person
+        set_online({"f0:18:98:aa:bb:cc": AP2})
+        set_ips({"f0:18:98:aa:bb:cc": "127.0.0.1"})
+        post(name="alex rivera", code="ironwood")
+        assert sorted(db_people(settings)) == [("Alex Rivera", PHONE), ("Alex Rivera", "f0:18:98:aa:bb:cc")]
+    finally:
+        set_ips({})
+        server.should_exit = True
+        t.join(5)
+
+
+def db_people(settings):
+    return [(r["name"], r["mac"]) for r in Database(settings.db_path).all(
+        "SELECT p.name, d.mac FROM people p JOIN devices d ON d.person_id = p.id ORDER BY d.mac")]
