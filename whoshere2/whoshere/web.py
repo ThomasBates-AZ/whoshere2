@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hmac
+import json
 import logging
 import secrets
 import time
@@ -23,6 +24,7 @@ from . import __version__, presence
 from .changelog import CHANGELOG
 from .config import Settings
 from .db import Database
+from .backup import ImportError_, export_data, import_text
 from .importer import import_v1
 from .macutil import is_randomized, normalize_mac
 from .poller import Poller
@@ -489,6 +491,67 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     async def admin_root(request: Request):
         return back("/admin/people")
 
+    # ----- admin: backup (export / import)
+
+    async def backup_page(request: Request):
+        if (r := admin_guard(request)):
+            return r
+        if request.method == "POST":
+            form = await checked_form(request)
+            if form is None:
+                flash(request, "Your session expired; please try again.", "error")
+                return back("/admin/backup")
+            text = ""
+            upload = form.get("file")
+            if upload is not None and hasattr(upload, "read"):
+                raw = await upload.read()
+                text = raw.decode("utf-8-sig", errors="replace")
+            if not text.strip():
+                text = str(form.get("text", ""))
+            if not text.strip():
+                flash(request, "Choose an export file or paste a list first.", "error")
+                return back("/admin/backup")
+            replace = form.get("mode") == "replace"
+            if replace and str(form.get("confirm", "")).strip().upper() != "REPLACE":
+                flash(request, 'To replace everything, type REPLACE in the box. Nothing was changed.', "error")
+                return back("/admin/backup")
+            try:
+                result = import_text(db, text, replace=replace)
+            except ImportError_ as e:
+                flash(request, f"Nothing imported: {e}", "error")
+                return back("/admin/backup")
+            flash(request, result.summary())
+            for p in result.problems[:20]:
+                flash(request, p, "warn")
+            if len(result.problems) > 20:
+                flash(request, f"...and {len(result.problems) - 20} more problems.", "warn")
+            poller.request_poll()
+            return back("/admin/people")
+        counts = db.one(
+            """SELECT (SELECT COUNT(*) FROM people) AS people,
+                      (SELECT COUNT(*) FROM devices WHERE person_id IS NOT NULL) AS devices,
+                      (SELECT COUNT(*) FROM locations WHERE alias IS NOT NULL) AS aliases,
+                      (SELECT COUNT(*) FROM events) AS events""")
+        return render(request, "backup.html", counts=counts)
+
+    async def export_download(request: Request):
+        if (r := admin_guard(request)):
+            return r
+        include_history = request.query_params.get("history") == "1"
+        data = export_data(db, include_history=include_history, tz=settings.timezone)
+        stamp = datetime.now(settings.timezone).strftime("%Y-%m-%d")
+        body = json.dumps(data, indent=2, ensure_ascii=False)
+        return Response(body, media_type="application/json", headers={
+            "Content-Disposition": f'attachment; filename="whoshere-export-{stamp}.json"',
+            "Cache-Control": "no-store"})
+
+    # ----- revision history
+
+    async def revisions_page(request: Request):
+        if not can_view(request):
+            return to_login(request)
+        return render(request, "revisions.html")
+
     # ----- lifecycle
 
     @contextlib.asynccontextmanager
@@ -516,6 +579,9 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         Route("/admin/devices", devices_page, methods=["GET", "POST"]),
         Route("/admin/locations", locations_page, methods=["GET", "POST"]),
         Route("/admin/status", status_page, methods=["GET", "POST"]),
+        Route("/admin/backup", backup_page, methods=["GET", "POST"]),
+        Route("/admin/export", export_download),
+        Route("/revisions", revisions_page),
         Mount("/static", StaticFiles(directory=str(HERE / "static")), name="static"),
     ]
     middleware = [Middleware(SessionMiddleware, secret_key=settings.secret_key,

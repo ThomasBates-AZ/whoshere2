@@ -69,6 +69,21 @@ Set `SELF_REGISTER=true` and staff can open `http://<server>:8085/register` **on
 
 A QR code for `/register` on the staff-room wall works well.
 
+## Moving to a new server
+
+1. On the old server, open **Backup** (admin), tick **Include arrival & departure history** if you want it, and click **Download export**. The file holds people, their devices, custom location names and hidden devices.
+2. Set up the new server as in [Setup](#setup), copying your `.env` file. Passwords and UniFi settings aren't in the export.
+3. On the new server, open **Backup**, choose the file and click **Import**.
+   - **Add to this server** (the default) matches people by name and never removes anything, so it's safe to run twice.
+   - **Replace everything** first deletes all people, device assignments, location names and history on the new server. You have to type `REPLACE` to confirm.
+
+The Backup page also accepts a v1 `users.txt`. The same thing works from a terminal:
+
+```sh
+python -m whoshere export /data/whoshere-export.json --history
+python -m whoshere import /data/whoshere-export.json            # add --replace to wipe first
+```
+
 ## How it decides
 
 - Someone is **Here** as soon as any of their devices is connected, and their location is the access point it's connected to. If they have both a phone and a laptop, the phone (wireless) wins.
@@ -125,6 +140,8 @@ Run inside the container (Container Manager → container → **Terminal**, or `
 ```sh
 python -m whoshere poll-once              # test the UniFi connection and list access points
 python -m whoshere import-users users.txt # import a v1 users.txt
+python -m whoshere export FILE --history  # export people, devices, location names (and history)
+python -m whoshere import FILE [--replace] # import an export or a v1 users.txt
 ```
 
 ## Development
@@ -147,7 +164,7 @@ Python 3.13, Starlette, Jinja2 and SQLite; no JavaScript build step. The code is
 Every change bumps the version: the minor number (2.1 → 2.2) for small and most changes, the major number (2.x → 3.0) for big ones.
 
 1. Set `__version__` in `whoshere/__init__.py`.
-2. Add an entry at the top of `whoshere/changelog.py` listing what changed. It appears under **Revision history** in every page's footer. A test fails if the two don't match.
+2. Add an entry at the top of `whoshere/changelog.py` listing what changed. It appears on the **Revision history** page, linked from every page's footer. A test fails if the two don't match.
 
 ## License
 

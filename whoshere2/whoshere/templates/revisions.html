@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Revision history · {{ title }}{% endblock %}
+{% block content %}
+<h1>Revision history</h1>
+<p class="muted">What changed in each version of Who's Here?. This server is running {{ version }}.</p>
+{% for rel in changelog %}
+  <section class="card revision{% if rel.version == version %} current{% endif %}">
+    <h2>{{ rel.version }} <span class="muted">· {{ rel.date }}</span>{% if rel.version == version %} <span class="chip current">running now</span>{% endif %}</h2>
+    <ul>{% for c in rel.changes %}<li>{{ c }}</li>{% endfor %}</ul>
+  </section>
+{% endfor %}
+{% endblock %}

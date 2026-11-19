@@ -7,6 +7,17 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "2.3.0",
+        "date": "2026-11-19",
+        "changes": [
+            "New Backup page: export people, their devices, custom location names and hidden devices to a file, optionally with history",
+            "Import an export file on a new server, either adding to what's there or replacing everything",
+            "The Backup page also imports a v1 users.txt (moved from the People page)",
+            "Command-line export and import for moving servers from a terminal",
+            "Revision history is now its own page, linked from the footer, and marks the version that's running",
+        ],
+    },
+    {
         "version": "2.2.0",
         "date": "2026-11-19",
         "changes": [

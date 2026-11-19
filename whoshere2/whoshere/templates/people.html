@@ -25,14 +25,5 @@
   </tbody>
 </table>
 
-<details class="card">
-  <summary>Import from Who's Here v1 (users.txt)</summary>
-  <form method="post">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input type="hidden" name="action" value="import">
-    <p class="muted">Paste the contents of your old <code>users.txt</code> — one person per line, name then MAC address. Safe to run more than once.</p>
-    <textarea name="text" rows="8" placeholder="Thomas Bates  00:11:22:33:44:55"></textarea>
-    <button>Import</button>
-  </form>
-</details>
+<p class="note">Moving to a new server, or bringing over your v1 <code>users.txt</code>? Use <a href="/admin/backup">Backup</a> to export or import the people list.</p>
 {% endblock %}
