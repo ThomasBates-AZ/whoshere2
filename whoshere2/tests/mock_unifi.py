@@ -39,7 +39,9 @@ NAMES = {
 }
 WIRED = {"3c:22:fb:10:20:30"}
 
-STATE = {"online": {}, "ips": {}}  # client mac -> AP mac; client mac -> IP override
+STATE = {"online": {}, "ips": {}, "ssids": {}, "legacy_key_ok": True}
+# online: client mac -> AP mac; ips / ssids: per-client overrides (default Wi-Fi is "Ironwood Staff");
+# legacy_key_ok: whether the classic API (stat/sta) accepts the API key
 LOCK = threading.Lock()
 SESSION = "sess-123"
 CSRF = "csrf-abc"
@@ -87,6 +89,14 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["online"] = {k.lower(): v.lower() for k, v in self._body().items()}
             return self._send(200, {"ok": True})
+        if path == "/_mock/ssids":
+            with LOCK:
+                STATE["ssids"] = {k.lower(): v for k, v in self._body().items()}
+            return self._send(200, {"ok": True})
+        if path == "/_mock/legacy_key":
+            with LOCK:
+                STATE["legacy_key_ok"] = bool(self._body().get("ok"))
+            return self._send(200, {"ok": True})
         if path == "/_mock/ips":
             with LOCK:
                 STATE["ips"] = {k.lower(): v for k, v in self._body().items()}
@@ -105,6 +115,8 @@ class Handler(BaseHTTPRequestHandler):
         path = url.path
         with LOCK:
             online = dict(STATE["online"])
+            ssids = dict(STATE["ssids"])
+            legacy_key_ok = STATE["legacy_key_ok"]
 
         if path.startswith("/proxy/network/integration/v1/"):
             if self.headers.get("X-API-KEY") != API_KEY:
@@ -129,7 +141,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"message": "not found"})
 
         if path.startswith("/proxy/network/api/s/default/"):
-            if f"TOKEN={SESSION}" not in (self.headers.get("Cookie") or "") or self.headers.get("X-CSRF-Token") != CSRF:
+            by_session = f"TOKEN={SESSION}" in (self.headers.get("Cookie") or "") and self.headers.get("X-CSRF-Token") == CSRF
+            by_key = legacy_key_ok and self.headers.get("X-API-KEY") == API_KEY
+            if not (by_session or by_key):
                 return self._send(401, {"meta": {"rc": "error", "msg": "api.err.LoginRequired"}, "data": []})
             if path.endswith("/stat/device"):
                 data = [{"mac": d["macAddress"].lower(), "name": d["name"],
@@ -140,6 +154,8 @@ class Handler(BaseHTTPRequestHandler):
                 for mac, ap in online.items():
                     row = {"mac": mac, "hostname": NAMES.get(mac, ""), "is_wired": mac in WIRED, "ip": ip_for(mac)}
                     row["sw_mac" if mac in WIRED else "ap_mac"] = ap
+                    if mac not in WIRED:
+                        row["essid"] = ssids.get(mac, "Ironwood Staff")
                     data.append(row)
                 return self._send(200, {"meta": {"rc": "ok"}, "data": data})
         self._send(404, {"error": "not found"})

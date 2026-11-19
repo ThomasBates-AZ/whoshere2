@@ -20,10 +20,17 @@
   <p class="note">Address seen: <span class="mono">{{ ip or 'unknown' }}</span>. If you just connected, wait a minute and try again.</p>
   <p><a class="button" href="/register">Try again</a></p>
 
+{% elif step == 'wrong_wifi' %}
+  <div class="flash warn">Your phone is connected to <strong>{{ wifi_here }}</strong>.</div>
+  <p>Connect it to {% if wifi_networks %}{% for n in wifi_networks %}<strong>{{ n }}</strong>{% if not loop.last %} or {% endif %}{% endfor %}{% else %}<strong>{{ staff_wifi }}</strong>{% endif %}, then come back to this page.</p>
+  <p><a class="button" href="/register">I've switched. Check again</a></p>
+
 {% elif step == 'private' %}
-  <div class="flash warn">Your phone is using a <strong>private Wi-Fi address</strong> on {{ staff_wifi }}.</div>
+  {% set this_wifi = wifi_here or staff_wifi %}
+  <div class="flash warn">Your phone is using a <strong>private Wi-Fi address</strong> on {{ this_wifi }}.</div>
   <p>A private address changes over time, so the board would lose track of you. Turn it off for
-    {{ staff_wifi }} only, then come back to this page.</p>
+    {{ this_wifi }}, then come back to this page.</p>
+  {% if wifi_networks|length > 1 %}<p>While you're there, turn it off for {{ wifi_networks|reject('equalto', wifi_here)|join(' and ') }} too, so the board finds you on either network.</p>{% endif %}
   {% include "_private_wifi_help.html" %}
   <p><a class="button" href="/register">I've turned it off. Check again</a></p>
 
@@ -35,7 +42,7 @@
 {% elif step == 'done' %}
   <div class="flash ok">Done. <strong>{{ client.name or 'This phone' }}</strong> is now registered to <strong>{{ person_name }}</strong>.</div>
   <p>You'll show as <strong>Here</strong> on the board within a minute or two.</p>
-  <p class="note">Keep Private Wi-Fi Address turned off for {{ staff_wifi }}, or the board will lose track of you.</p>
+  <p class="note">Keep Private Wi-Fi Address turned off for {{ wifi_networks|join(' and ') if wifi_networks else staff_wifi }}, or the board will lose track of you.</p>
   <p><a class="button" href="/">Go to the board</a></p>
 
 {% else %}

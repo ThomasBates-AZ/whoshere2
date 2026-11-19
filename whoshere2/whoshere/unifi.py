@@ -19,7 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .config import Settings
 from .macutil import normalize_mac
@@ -39,6 +39,7 @@ class ClientInfo:
     uplink_mac: str | None  # access point (or switch, for wired clients) it's attached to
     wired: bool = False
     ip: str | None = None   # current IPv4 address, used to recognize a phone on the self-register page
+    ssid: str | None = None  # Wi-Fi network name; None for wired clients or when UniFi didn't say
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,9 @@ class Snapshot:
     clients: list[ClientInfo] = field(default_factory=list)
     devices: list[NetDevice] = field(default_factory=list)
     taken_at: float = field(default_factory=time.time)
+    # Whether Wi-Fi network names were available on this poll, and why not if they weren't.
+    ssid_ok: bool = True
+    ssid_note: str | None = None
 
 
 class _Http:
@@ -123,11 +127,17 @@ def _describe(status: int, payload) -> str:
 class IntegrationClient(_Http):
     PREFIX = "/proxy/network/integration/v1"
 
-    def __init__(self, base_url: str, api_key: str, site: str, verify_ssl: bool):
+    SSID_RETRY = 3600  # seconds to wait before retrying network names after the console refused
+
+    def __init__(self, base_url: str, api_key: str, site: str, verify_ssl: bool, want_ssid: bool = True):
         super().__init__(base_url, verify_ssl)
         self.api_key = api_key
         self.site = site
+        self.want_ssid = want_ssid
         self._site_id: str | None = None
+        self._site_ref: str | None = None  # short site name ("default") used by the classic API
+        self._ssid_note: str | None = None
+        self._ssid_retry_at = 0.0
 
     def _get(self, path: str, params: dict | None = None):
         status, _, payload = self.request("GET", self.PREFIX + path, params=params,
@@ -163,9 +173,11 @@ class IntegrationClient(_Http):
             candidates = {str(s.get(k, "")).lower() for k in ("id", "internalReference", "name")}
             if wanted in candidates:
                 self._site_id = s["id"]
+                self._site_ref = s.get("internalReference") or self.site
                 return self._site_id
         if len(sites) == 1 and wanted == "default":
             self._site_id = sites[0]["id"]
+            self._site_ref = sites[0].get("internalReference") or "default"
             return self._site_id
         names = ", ".join(f"{s.get('name')} ({s.get('internalReference')})" for s in sites) or "none"
         raise UniFiError(f"Site {self.site!r} not found. Sites this key can see: {names}")
@@ -198,7 +210,39 @@ class IntegrationClient(_Http):
                 wired=str(c.get("type", "")).upper() == "WIRED",
                 ip=c.get("ipAddress") or None,
             ))
-        return Snapshot(clients=clients, devices=devices)
+
+        snap = Snapshot(clients=clients, devices=devices)
+        if self.want_ssid:
+            ssids = self._ssids()
+            if ssids is None:
+                snap.ssid_ok, snap.ssid_note = False, self._ssid_note
+            else:
+                snap.clients = [replace(c, ssid=None if c.wired else ssids.get(c.mac)) for c in clients]
+        return snap
+
+    def _ssids(self) -> dict[str, str] | None:
+        """Wi-Fi network name per client MAC.
+
+        The Integration API's client list has no network name, so this asks the classic
+        client list (stat/sta, field "essid") with the same API key. If the console refuses,
+        everything else keeps working; we just try again later.
+        """
+        if time.time() < self._ssid_retry_at:
+            return None
+        path = f"/proxy/network/api/s/{self._site_ref or self.site}/stat/sta"
+        try:
+            status, _, payload = self.request("GET", path, headers={"X-API-KEY": self.api_key})
+        except UniFiError as e:
+            status, payload = 0, str(e)
+        if status == 200 and isinstance(payload, dict) and isinstance(payload.get("data"), list):
+            self._ssid_note = None
+            return {mac: c["essid"] for c in payload["data"]
+                    if (mac := normalize_mac(c.get("mac"))) and c.get("essid") and not c.get("is_wired")}
+        reason = _describe(status, payload) if status else str(payload)
+        self._ssid_note = (f"UniFi didn't provide Wi-Fi network names with this API key ({reason}). "
+                           "Everything else works; network names will be blank.")
+        self._ssid_retry_at = time.time() + self.SSID_RETRY
+        return None
 
 
 # --------------------------------------------------------------------------- username/password
@@ -272,6 +316,7 @@ class SessionClient(_Http):
                 uplink_mac=normalize_mac(c.get("sw_mac") if wired else c.get("ap_mac")),
                 wired=wired,
                 ip=c.get("ip") or None,
+                ssid=None if wired else (c.get("essid") or None),
             ))
         return Snapshot(clients=clients, devices=devices)
 
@@ -288,7 +333,8 @@ def find_client_by_ip(snap: Snapshot, ip: str | None) -> ClientInfo | None:
 def make_client(settings: Settings):
     if settings.auth_mode == "api_key":
         return IntegrationClient(settings.unifi_url, settings.unifi_api_key,
-                                 settings.unifi_site, settings.unifi_verify_ssl)
+                                 settings.unifi_site, settings.unifi_verify_ssl,
+                                 want_ssid=settings.show_wifi_network or bool(settings.wifi_networks))
     if settings.auth_mode == "password":
         return SessionClient(settings.unifi_url, settings.unifi_username, settings.unifi_password,
                              settings.unifi_site, settings.unifi_verify_ssl)

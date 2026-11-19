@@ -78,7 +78,8 @@ Each tracked phone must have **Private Wi-Fi Address** (iOS) / **Randomized MAC*
 
 Set `SELF_REGISTER=true` and staff can open `http://<server>:8085/register` **on their phone, while connected to the staff Wi-Fi**. The app asks UniFi which device has that phone's IP address, takes its MAC from UniFi (never from the browser), and adds it under the name they type. Typing a name that's already on the board adds the phone to that person, so a new phone replaces nothing and needs no admin.
 
-- If the phone is using a private Wi-Fi address, the page refuses it and shows iPhone and Android steps for turning that off on `STAFF_WIFI_NAME`.
+- If the phone is using a private Wi-Fi address, the page refuses it and shows iPhone and Android steps for turning that off on the network it's connected to.
+- If `WIFI_NETWORKS` is set and the phone is on another network (a guest Wi-Fi, say), the page asks them to switch to a staff network first.
 - If the phone is already registered, the page says to whom.
 - Set `REGISTER_CODE` so only people you've told the code can register. Anyone on the staff Wi-Fi can use the page otherwise.
 - The page needs to see the phone's real IP address. Open the app directly by its port, or, if you put a reverse proxy in front of it, set `FORWARDED_ALLOW_IPS` to the proxy's address.
@@ -99,6 +100,17 @@ The Backup page also accepts a v1 `users.txt`. The same thing works from a termi
 python -m whoshere export /data/whoshere-export.json --history
 python -m whoshere import /data/whoshere-export.json            # add --replace to wipe first
 ```
+
+## More than one staff Wi-Fi network
+
+Who's Here sees every device on the UniFi site, whichever network it joined, so staff are tracked on all of your networks with no setup. Two settings make several networks easier to live with:
+
+- `WIFI_NETWORKS=Ironwood Staff, Ironwood Office` lists your staff networks. The **Devices** list then only shows phones on those networks (there's a link to show everything), and **Add my phone** only accepts phones on them.
+- `SHOW_WIFI_NETWORK=true` (the default) shows the network next to each person's location on the board, and on the Devices and History pages.
+
+Phones keep Private Wi-Fi Address per network, so staff need it **off on each staff network**. Otherwise the same phone shows up under a different MAC address on the other one. If that has already happened, assign both addresses to the person on the **Devices** page.
+
+With an API key, the network names come from UniFi's classic client list, read with the same key. If a console doesn't allow that, everything else keeps working without network names, and **Status** says so.
 
 ## How it decides
 
@@ -130,7 +142,9 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 | `DEVICE_RETENTION_DAYS` | `30` | Forget unassigned (guest) devices after this |
 | `SELF_REGISTER` | `false` | Turn on the `/register` page so staff can add their own phone |
 | `REGISTER_CODE` | | Optional code staff must enter on `/register` |
-| `STAFF_WIFI_NAME` | `the staff Wi-Fi` | Network name used in the instructions, e.g. `Ironwood Staff` |
+| `WIFI_NETWORKS` | | Staff Wi-Fi networks, comma-separated, e.g. `Ironwood Staff, Ironwood Office`. Filters the Devices list and "Add my phone"; doesn't change who counts as here |
+| `SHOW_WIFI_NETWORK` | `true` | Show which Wi-Fi network each person and device is on |
+| `STAFF_WIFI_NAME` | names in `WIFI_NETWORKS` | Override the network name used in the "Add my phone" instructions |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Reverse proxies whose `X-Forwarded-For` header is trusted |
 
 ## JSON API

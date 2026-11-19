@@ -394,3 +394,189 @@ def test_import_detects_v1_and_rejects_junk(db):
                 '{"format": "whoshere-export", "format_version": 99, "people": []}']:
         with pytest.raises(ImportError_):
             import_text(db, bad)
+
+
+# ---------------------------------------------------------------- Wi-Fi networks
+
+def _set(url, what, body):
+    import json, urllib.request
+    req = urllib.request.Request(f"{url}/_mock/{what}", data=json.dumps(body).encode(), method="POST")
+    urllib.request.urlopen(req).read()
+
+
+def test_integration_client_adds_wifi_names(mock):
+    url, set_online = mock
+    set_online({PHONE: AP1, "28:de:cf:88:f7:a2": AP2, "3c:22:fb:10:20:30": "0c:ea:14:00:00:01"})
+    _set(url, "ssids", {"28:de:cf:88:f7:a2": "Ironwood Office"})
+    try:
+        s = IntegrationClient(url, "test-key", "default", False).snapshot()
+        by = {c.mac: c for c in s.clients}
+        assert s.ssid_ok and by[PHONE].ssid == "Ironwood Staff"
+        assert by["28:de:cf:88:f7:a2"].ssid == "Ironwood Office"
+        assert by["3c:22:fb:10:20:30"].ssid is None  # wired
+    finally:
+        _set(url, "ssids", {})
+
+
+def test_wifi_names_refused_keeps_working(mock):
+    url, set_online = mock
+    set_online({PHONE: AP1})
+    _set(url, "legacy_key", {"ok": False})
+    try:
+        c = IntegrationClient(url, "test-key", "default", False)
+        s = c.snapshot()
+        assert [x.mac for x in s.clients] == [PHONE] and s.clients[0].ssid is None
+        assert not s.ssid_ok and "Wi-Fi network names" in s.ssid_note
+        # doesn't hammer the console: next poll skips the lookup until the retry time
+        _set(url, "legacy_key", {"ok": True})
+        assert not c.snapshot().ssid_ok
+        c._ssid_retry_at = 0
+        assert c.snapshot().clients[0].ssid == "Ironwood Staff"
+    finally:
+        _set(url, "legacy_key", {"ok": True})
+
+
+def test_wifi_lookup_off_when_not_wanted(mock):
+    url, set_online = mock
+    set_online({PHONE: AP1})
+    s = IntegrationClient(url, "test-key", "default", False, want_ssid=False).snapshot()
+    assert s.ssid_ok and s.clients[0].ssid is None
+
+
+def test_session_client_reads_essid(mock):
+    url, set_online = mock
+    set_online({PHONE: AP2})
+    s = SessionClient(url, "whoshere", "secret", "default", False).snapshot()
+    assert s.clients[0].ssid == "Ironwood Staff"
+
+
+def test_presence_records_wifi(db):
+    add_person(db, "Alex", PHONE)
+    t0 = 9_000_000.0
+    presence.apply_snapshot(db, snap({}, t0), GRACE)
+    s = snap({PHONE: AP1}, t0 + 60)
+    s.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Ironwood Office")]
+    presence.apply_snapshot(db, s, GRACE)
+    b = presence.board(db, 300, now=t0 + 61)
+    assert b["here"][0]["wifi"] == "Ironwood Office"
+    assert db.one("SELECT ssid FROM events WHERE kind = 'arrive'")["ssid"] == "Ironwood Office"
+    assert db.one("SELECT last_ssid FROM devices WHERE mac = ?", (PHONE,))["last_ssid"] == "Ironwood Office"
+    # a poll without names (lookup refused) keeps the device's last known network
+    s2 = snap({PHONE: AP1}, t0 + 120)
+    s2.ssid_ok = False
+    presence.apply_snapshot(db, s2, GRACE)
+    assert db.one("SELECT last_ssid FROM devices WHERE mac = ?", (PHONE,))["last_ssid"] == "Ironwood Office"
+
+
+def test_existing_database_gets_new_columns(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE devices (mac TEXT PRIMARY KEY, person_id INTEGER, client_name TEXT, first_seen REAL,
+            last_seen REAL, last_uplink TEXT, connected INTEGER NOT NULL DEFAULT 0, ignored INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE presence (person_id INTEGER PRIMARY KEY, state TEXT NOT NULL, since REAL, last_seen REAL,
+            uplink TEXT, missing_since REAL);
+        CREATE TABLE events (id INTEGER PRIMARY KEY, person_id INTEGER NOT NULL, kind TEXT NOT NULL, at REAL NOT NULL,
+            uplink TEXT, device_mac TEXT);
+        INSERT INTO devices (mac) VALUES ('90:83:3e:7d:d3:6b');
+    """)
+    conn.commit(); conn.close()
+    db = Database(path)
+    assert db.one("SELECT last_ssid FROM devices")["last_ssid"] is None
+    Database(path)  # second start is a no-op
+
+
+def test_watched_wifi_setting(monkeypatch, tmp_path):
+    from whoshere.config import Settings
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("WIFI_NETWORKS", " Ironwood Staff , Ironwood Office,Ironwood Staff ")
+    monkeypatch.delenv("STAFF_WIFI_NAME", raising=False)
+    s = Settings.from_env()
+    assert s.wifi_networks == ("Ironwood Staff", "Ironwood Office")
+    assert s.staff_wifi == "Ironwood Staff or Ironwood Office"
+    assert s.is_watched_wifi("ironwood office") and not s.is_watched_wifi("Ironwood Guest")
+    assert not s.is_watched_wifi(None)
+    assert s.show_wifi_network
+    monkeypatch.setenv("SHOW_WIFI_NETWORK", "false")
+    monkeypatch.setenv("WIFI_NETWORKS", "")
+    s = Settings.from_env()
+    assert not s.show_wifi_network and s.is_watched_wifi("anything")
+
+
+def test_two_networks_register_and_devices(mock, tmp_path, monkeypatch):
+    """Runs the real app with WIFI_NETWORKS set: registration refuses the guest network,
+    the Devices page shows only phones on the staff networks, the board shows the network."""
+    import http.cookiejar, json, re, threading, urllib.parse, urllib.request
+    import uvicorn
+    from whoshere.config import Settings
+    from whoshere.web import create_app
+
+    url, set_online = mock
+    staff2, guest = "28:de:cf:88:f7:a2", "f4:0f:24:11:22:33"
+    for k, v in {"DATA_DIR": str(tmp_path), "UNIFI_URL": url, "UNIFI_API_KEY": "test-key",
+                 "ADMIN_PASSWORD": "admin", "SELF_REGISTER": "true",
+                 "WIFI_NETWORKS": "Ironwood Staff, Ironwood Office"}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("STAFF_WIFI_NAME", raising=False)
+    monkeypatch.delenv("REGISTER_CODE", raising=False)
+    settings = Settings.from_env()
+    app = create_app(settings, start_poller=False)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.05)
+    base = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    get = lambda path: opener.open(base + path).read().decode()
+
+    try:
+        set_online({PHONE: AP1, staff2: AP2, guest: AP2, "3c:22:fb:10:20:30": "0c:ea:14:00:00:01"})
+        _set(url, "ssids", {staff2: "Ironwood Office", guest: "Ironwood Guest"})
+
+        # Registration from the guest network is refused and names both staff networks
+        _set(url, "ips", {guest: "127.0.0.1"})
+        page = get("/register")
+        assert "connected to <strong>Ironwood Guest</strong>" in page
+        assert "<strong>Ironwood Staff</strong> or <strong>Ironwood Office</strong>" in page
+        # ...but works from the second staff network
+        _set(url, "ips", {staff2: "127.0.0.1"})
+        assert "Add my phone</button>" in get("/register")
+
+        # Devices page: staff networks only by default, everything with net=all
+        app.state.poller.poll_once()
+        login = get("/login")
+        csrf = re.search(r'name="csrf" value="([^"]+)"', login).group(1)
+        opener.open(base + "/login", data=urllib.parse.urlencode({"csrf": csrf, "password": "admin"}).encode())
+        page = get("/admin/devices")
+        assert PHONE in page and staff2 in page
+        assert guest not in page and "3c:22:fb:10:20:30" not in page
+        assert "Show all networks" in page and "Ironwood Office" in page
+        page = get("/admin/devices?show=unassigned&net=all")
+        assert guest in page and "3c:22:fb:10:20:30" in page
+
+        # Board shows the network next to the location
+        pid = add_person(app.state.db, "Sam Ortiz")
+        app.state.db.run("UPDATE devices SET person_id = ? WHERE mac = ?", (pid, staff2))
+        app.state.poller.poll_once()
+        assert '<span class="wifi">Ironwood Office</span>' in get("/")
+        status = json.loads(get("/api/status"))
+        assert status["on_site"][0]["wifi"] == "Ironwood Office"
+        assert "Ironwood Staff, Ironwood Office" in get("/admin/status")
+    finally:
+        server.should_exit = True
+        _set(url, "ssids", {})
+        _set(url, "ips", {})
+
+
+def test_export_import_keeps_wifi_in_history(db):
+    from whoshere.backup import export_data, import_text
+    import json
+    pid = add_person(db, "Alex", PHONE)
+    db.run("INSERT INTO events (person_id, kind, at, uplink, ssid) VALUES (?, 'arrive', 1, ?, 'Ironwood Office')",
+           (pid, AP1))
+    data = export_data(db, include_history=True)
+    assert data["history"][0]["wifi"] == "Ironwood Office"
+    other = Database(db.path + ".2")
+    import_text(other, json.dumps(data))
+    assert other.one("SELECT ssid FROM events")["ssid"] == "Ironwood Office"

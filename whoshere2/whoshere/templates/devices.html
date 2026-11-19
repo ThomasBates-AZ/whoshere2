@@ -16,8 +16,15 @@
       <option value="{{ v }}" {% if show == v %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+  <input type="hidden" name="net" value="{{ net }}">
   <button class="secondary">Search</button>
 </form>
+{% if wifi_networks and show == 'unassigned' and not q %}
+  <p class="note">
+    {% if net_filtered %}Showing devices on {{ wifi_networks|join(' or ') }}. <a href="?show=unassigned&amp;net=all{% if for_person %}&amp;for={{ for_person.id }}{% endif %}">Show all networks</a>
+    {% else %}Showing devices on all networks. <a href="?show=unassigned&amp;net=staff{% if for_person %}&amp;for={{ for_person.id }}{% endif %}">Only {{ wifi_networks|join(' and ') }}</a>{% endif %}
+  </p>
+{% endif %}
 
 <table class="list devices">
   <thead><tr><th>Device</th><th>MAC</th><th>Seen</th><th>Belongs to</th><th></th></tr></thead>
@@ -26,7 +33,7 @@
     <tr>
       <td>{{ d.client_name or 'Unnamed device' }}</td>
       <td class="mono">{{ d.mac }}{% if is_randomized(d.mac) %} <span class="chip warn" title="Private Wi-Fi address: phones change these. Turn off Private Wi-Fi Address on the phone for this network before assigning.">private</span>{% endif %}</td>
-      <td>{% if d.connected %}<span class="pill here">Online</span> <span class="muted">{{ names.get(d.last_uplink, '') }}</span>{% elif d.last_seen %}<span class="muted">{{ d.last_seen|when }}</span>{% else %}<span class="muted">not seen yet</span>{% endif %}</td>
+      <td>{% if d.connected %}<span class="pill here">Online</span> <span class="muted">{{ names.get(d.last_uplink, '') }}</span>{% if show_wifi and d.last_ssid %} <span class="wifi">{{ d.last_ssid }}</span>{% endif %}{% elif d.last_seen %}<span class="muted">{{ d.last_seen|when }}</span>{% if show_wifi and d.last_ssid %} <span class="wifi">{{ d.last_ssid }}</span>{% endif %}{% else %}<span class="muted">not seen yet</span>{% endif %}</td>
       <td>
         <form method="post" class="inline">
           <input type="hidden" name="csrf" value="{{ csrf }}">

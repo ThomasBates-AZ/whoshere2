@@ -90,6 +90,7 @@ tr.inactive td { opacity: .55; }
 .chip.ghost { background: transparent; color: var(--muted); }
 .chip.leaving { background: var(--yellow-bg); border-color: var(--yellow-line); color: var(--yellow); }
 .chip.warn { background: var(--amber-bg); border-color: #f0d38a; color: var(--amber); font-family: system-ui, sans-serif; }
+.wifi { display: inline-block; font-size: .78rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 .45rem; margin-left: .25rem; white-space: nowrap; vertical-align: 1px; }
 .warn-text { color: var(--amber); }
 .hint { font-size: .8rem; color: var(--green); margin-top: .2rem; }
 

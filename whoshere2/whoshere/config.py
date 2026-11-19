@@ -49,6 +49,8 @@ class Settings:
     self_register: bool
     register_code: str
     staff_wifi: str
+    show_wifi_network: bool          # show which Wi-Fi network people/devices are on
+    wifi_networks: tuple[str, ...]   # the staff networks to watch; empty = all
 
     # Web
     title: str
@@ -61,6 +63,12 @@ class Settings:
     @property
     def db_path(self) -> Path:
         return self.data_dir / "whoshere.db"
+
+    def is_watched_wifi(self, ssid: str | None) -> bool:
+        """True if ssid is one of WIFI_NETWORKS (case-insensitive), or no list is set."""
+        if not self.wifi_networks:
+            return True
+        return bool(ssid) and ssid.lower() in {n.lower() for n in self.wifi_networks}
 
     @property
     def auth_mode(self) -> str:
@@ -76,6 +84,8 @@ class Settings:
         data_dir.mkdir(parents=True, exist_ok=True)
 
         poll = _int("POLL_INTERVAL_SECONDS", 60, minimum=10)
+        wifi_networks: tuple[str, ...] = tuple(dict.fromkeys(
+            n.strip() for n in _str("WIFI_NETWORKS").split(",") if n.strip()))
         tz_name = _str("TZ", "America/Phoenix") or "America/Phoenix"
         try:
             tz = ZoneInfo(tz_name)
@@ -96,7 +106,9 @@ class Settings:
             device_retention_days=_int("DEVICE_RETENTION_DAYS", 30, minimum=1),
             self_register=_bool("SELF_REGISTER", False),
             register_code=os.environ.get("REGISTER_CODE", "").strip(),
-            staff_wifi=_str("STAFF_WIFI_NAME") or "the staff Wi-Fi",
+            staff_wifi=_str("STAFF_WIFI_NAME") or " or ".join(wifi_networks) or "the staff Wi-Fi",
+            show_wifi_network=_bool("SHOW_WIFI_NETWORK", True),
+            wifi_networks=wifi_networks,
             title=_str("SITE_TITLE", "Who's Here?") or "Who's Here?",
             admin_password=os.environ.get("ADMIN_PASSWORD", ""),
             view_password=os.environ.get("VIEW_PASSWORD", ""),

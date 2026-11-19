@@ -33,14 +33,17 @@ def apply_snapshot(db: Database, snap: Snapshot, grace: int, now: float | None =
         for c in snap.clients:
             connected[c.mac] = c
             conn.execute(
-                """INSERT INTO devices (mac, client_name, first_seen, last_seen, last_uplink, connected)
-                   VALUES (?, ?, ?, ?, ?, 1)
+                """INSERT INTO devices (mac, client_name, first_seen, last_seen, last_uplink, connected, last_ssid)
+                   VALUES (?, ?, ?, ?, ?, 1, NULLIF(?, ''))
                    ON CONFLICT(mac) DO UPDATE SET
                        client_name = COALESCE(NULLIF(excluded.client_name, ''), devices.client_name),
                        last_seen = excluded.last_seen,
                        last_uplink = COALESCE(excluded.last_uplink, devices.last_uplink),
-                       connected = 1""",
-                (c.mac, c.name, now, now, c.uplink_mac))
+                       connected = 1,
+                       last_ssid = CASE WHEN ? THEN NULLIF(?, '') ELSE devices.last_ssid END""",
+                # Wired clients clear the network name; if UniFi didn't give names this poll, keep the last one.
+                (c.mac, c.name, now, now, c.uplink_mac, c.ssid or "",
+                 1 if (c.wired or snap.ssid_ok) else 0, c.ssid or ""))
 
         people = conn.execute("SELECT id FROM people WHERE active = 1").fetchall()
         for (person_id,) in people:
@@ -57,20 +60,20 @@ def apply_snapshot(db: Database, snap: Snapshot, grace: int, now: float | None =
                 if pres is None:
                     # First time we've looked at this person; we don't know when they arrived.
                     conn.execute(
-                        "INSERT INTO presence (person_id, state, since, last_seen, uplink) "
-                        "VALUES (?, 'here', NULL, ?, ?)", (person_id, now, best.uplink_mac))
+                        "INSERT INTO presence (person_id, state, since, last_seen, uplink, ssid) "
+                        "VALUES (?, 'here', NULL, ?, ?, ?)", (person_id, now, best.uplink_mac, best.ssid))
                 elif pres["state"] == "away":
                     conn.execute(
-                        "UPDATE presence SET state = 'here', since = ?, last_seen = ?, uplink = ?, "
+                        "UPDATE presence SET state = 'here', since = ?, last_seen = ?, uplink = ?, ssid = ?, "
                         "missing_since = NULL WHERE person_id = ?",
-                        (now, now, best.uplink_mac, person_id))
+                        (now, now, best.uplink_mac, best.ssid, person_id))
                     conn.execute(
-                        "INSERT INTO events (person_id, kind, at, uplink, device_mac) "
-                        "VALUES (?, 'arrive', ?, ?, ?)", (person_id, now, best.uplink_mac, best.mac))
+                        "INSERT INTO events (person_id, kind, at, uplink, device_mac, ssid) "
+                        "VALUES (?, 'arrive', ?, ?, ?, ?)", (person_id, now, best.uplink_mac, best.mac, best.ssid))
                 else:
                     conn.execute(
-                        "UPDATE presence SET last_seen = ?, uplink = ?, missing_since = NULL "
-                        "WHERE person_id = ?", (now, best.uplink_mac, person_id))
+                        "UPDATE presence SET last_seen = ?, uplink = ?, ssid = ?, missing_since = NULL "
+                        "WHERE person_id = ?", (now, best.uplink_mac, best.ssid, person_id))
                 continue
 
             last_seen = max((d["last_seen"] for d in devices if d["last_seen"]), default=None)
@@ -86,8 +89,8 @@ def apply_snapshot(db: Database, snap: Snapshot, grace: int, now: float | None =
                         "UPDATE presence SET state = 'away', since = ?, missing_since = NULL "
                         "WHERE person_id = ?", (left_at, person_id))
                     conn.execute(
-                        "INSERT INTO events (person_id, kind, at, uplink) VALUES (?, 'depart', ?, ?)",
-                        (person_id, left_at, pres["uplink"]))
+                        "INSERT INTO events (person_id, kind, at, uplink, ssid) VALUES (?, 'depart', ?, ?, ?)",
+                        (person_id, left_at, pres["uplink"], pres["ssid"]))
                 elif pres["missing_since"] is None:
                     conn.execute("UPDATE presence SET missing_since = ? WHERE person_id = ?",
                                  (now, person_id))
@@ -122,7 +125,7 @@ def board(db: Database, stale_after: int, now: float | None = None) -> dict:
     names = location_names(db)
 
     rows = db.all(
-        """SELECT p.id, p.name, pr.state, pr.since, pr.last_seen, pr.uplink, pr.missing_since,
+        """SELECT p.id, p.name, pr.state, pr.since, pr.last_seen, pr.uplink, pr.missing_since, pr.ssid,
                   (SELECT COUNT(*) FROM devices d WHERE d.person_id = p.id) AS device_count
            FROM people p LEFT JOIN presence pr ON pr.person_id = p.id
            WHERE p.active = 1""")
@@ -143,6 +146,7 @@ def board(db: Database, stale_after: int, now: float | None = None) -> dict:
             "since": r["since"],
             "last_seen": r["last_seen"],
             "leaving": state == "here" and r["missing_since"] is not None,
+            "wifi": r["ssid"] if state == "here" else None,
         })
     order = {"here": 0, "unknown": 1, "away": 2, "untracked": 3}
     people.sort(key=lambda p: (order[p["state"]], p["name"].lower()))

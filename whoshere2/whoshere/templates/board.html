@@ -11,7 +11,7 @@
     <ul class="who">
       {% for p in b.here %}
         <li><strong>{{ p.name }}</strong>
-          {% if p.location %}<span class="chip">{{ p.location }}</span>{% endif %}
+          {% if p.location %}<span class="chip">{{ p.location }}{% if show_wifi and p.wifi %} · {{ p.wifi }}{% endif %}</span>{% endif %}
           {% if p.leaving %}<span class="chip leaving">Here? · last seen {{ p.last_seen|ago }}</span>{% endif %}
         </li>
       {% endfor %}
@@ -39,7 +39,7 @@
       <td class="name">{{ p.name }}</td>
       {% if p.state == 'here' %}
         <td>{% if p.leaving %}<span class="pill leaving" title="Not seen for a few minutes; counts as here until the grace period ends">Here?</span>{% else %}<span class="pill here">Here</span>{% endif %}</td>
-        <td>{{ p.location or '—' }}</td>
+        <td>{{ p.location or '—' }}{% if show_wifi and p.wifi %} <span class="wifi">{{ p.wifi }}</span>{% endif %}</td>
         <td class="muted">{% if p.leaving %}last seen {{ p.last_seen|ago }}{% elif p.since %}since {{ p.since|when }}{% else %}seen {{ p.last_seen|ago }}{% endif %}</td>
       {% elif p.state == 'unknown' %}
         <td><span class="pill unknown">Checking…</span></td><td>—</td><td class="muted">waiting for first update</td>

@@ -5,7 +5,14 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Columns added after the first release: (table, column, type). Added to existing databases on start.
+ADDED_COLUMNS = [
+    ("devices", "last_ssid", "TEXT"),
+    ("presence", "ssid", "TEXT"),
+    ("events", "ssid", "TEXT"),
+]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -78,6 +85,10 @@ class Database:
         self.path = str(path)
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            for table, column, kind in ADDED_COLUMNS:
+                existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
             conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
                          (str(SCHEMA_VERSION),))
 

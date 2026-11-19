@@ -23,9 +23,9 @@
       <td class="time">{{ e.at|clock }}</td>
       <td class="name">{{ e.name }}</td>
       {% if e.kind == 'arrive' %}
-        <td><span class="pill here">Arrived</span></td><td>{{ e.location or '' }}</td>
+        <td><span class="pill here">Arrived</span></td><td>{{ e.location or '' }}{% if show_wifi and e.wifi %} <span class="wifi">{{ e.wifi }}</span>{% endif %}</td>
       {% else %}
-        <td><span class="pill away">Left</span></td><td class="muted">{% if e.location %}last seen at {{ e.location }}{% endif %}</td>
+        <td><span class="pill away">Left</span></td><td class="muted">{% if e.location %}last seen at {{ e.location }}{% endif %}{% if show_wifi and e.wifi %} <span class="wifi">{{ e.wifi }}</span>{% endif %}</td>
       {% endif %}
     </tr>
     {% endfor %}
