@@ -1,15 +1,41 @@
+# Who's Here? - works as-is in Portainer (Stacks > Repository), Synology Container Manager,
+# or plain `docker compose up -d`.
+#
+# Settings: in Portainer, enter them under the stack's "Environment variables".
+# Everywhere else, put them in a .env file next to this one (copy .env.example).
+# Anything you don't set uses the default shown after ":-".
 services:
   whoshere:
     build: .
-    # Or, to skip building on the NAS, use the image published by GitHub Actions:
-    # image: ghcr.io/batesta/whoshere2:latest
+    # To skip building, use the image GitHub Actions publishes from main instead:
+    # image: ghcr.io/thomasbates-az/whoshere2:latest
     container_name: whoshere
     restart: unless-stopped
-    env_file: .env
     ports:
-      - "8085:8080"   # open http://<your-nas>:8085
+      - "${HOST_PORT:-8085}:8080"   # open http://<docker-host>:8085
     volumes:
       - whoshere-data:/data
+    environment:
+      UNIFI_URL: ${UNIFI_URL:-}
+      UNIFI_API_KEY: ${UNIFI_API_KEY:-}
+      UNIFI_USERNAME: ${UNIFI_USERNAME:-}
+      UNIFI_PASSWORD: ${UNIFI_PASSWORD:-}
+      UNIFI_SITE: ${UNIFI_SITE:-default}
+      UNIFI_VERIFY_SSL: ${UNIFI_VERIFY_SSL:-false}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      VIEW_PASSWORD: ${VIEW_PASSWORD:-}
+      SITE_TITLE: ${SITE_TITLE:-Who's Here?}
+      TZ: ${TZ:-America/Phoenix}
+      SELF_REGISTER: ${SELF_REGISTER:-false}
+      REGISTER_CODE: ${REGISTER_CODE:-}
+      STAFF_WIFI_NAME: ${STAFF_WIFI_NAME:-the staff Wi-Fi}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-60}
+      DEPARTURE_GRACE_MINUTES: ${DEPARTURE_GRACE_MINUTES:-10}
+      STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-180}
+      HISTORY_DAYS: ${HISTORY_DAYS:-365}
+      DEVICE_RETENTION_DAYS: ${DEVICE_RETENTION_DAYS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 volumes:
   whoshere-data:

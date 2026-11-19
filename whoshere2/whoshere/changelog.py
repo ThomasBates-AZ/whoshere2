@@ -7,6 +7,17 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "2.4.0",
+        "date": "2026-11-19",
+        "changes": [
+            "Deploys straight from GitHub as a Portainer stack: settings go in the stack's Environment variables, no .env file needed",
+            "docker-compose.yml still reads a .env file for Synology Container Manager and plain Docker Compose; unset settings use their defaults",
+            "Board port can be changed with HOST_PORT (default 8085)",
+            "GitHub Actions now runs the tests and publishes a ready-made image (ghcr.io/thomasbates-az/whoshere2) on every merge to main",
+            "README: Portainer setup steps",
+        ],
+    },
+    {
         "version": "2.3.0",
         "date": "2026-11-19",
         "changes": [

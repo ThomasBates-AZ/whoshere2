@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
                       help="delete all people, assignments, location names and history first")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    logging.basicConfig(level=(os.environ.get("LOG_LEVEL") or "INFO").upper(),
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     settings = Settings.from_env()
 
@@ -88,11 +88,11 @@ def main(argv: list[str] | None = None) -> int:
     import uvicorn
     from .web import create_app
     app = create_app(settings)
-    uvicorn.run(app, host=os.environ.get("HOST", "0.0.0.0"), port=int(os.environ.get("PORT", "8080")),
+    uvicorn.run(app, host=os.environ.get("HOST") or "0.0.0.0", port=int(os.environ.get("PORT") or "8080"),
                 proxy_headers=True, log_level="warning",
                 # Only trust X-Forwarded-For from these addresses. The self-register page
                 # identifies a phone by its IP, so a spoofed header must not be believed.
-                forwarded_allow_ips=os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1"))
+                forwarded_allow_ips=os.environ.get("FORWARDED_ALLOW_IPS") or "127.0.0.1")
     return 0
 
 

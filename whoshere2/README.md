@@ -36,15 +36,31 @@ Recommended for UniFi Network 9.0 and newer (built and tested against the API in
 
 If you can't use an API key, leave it blank and set `UNIFI_USERNAME` / `UNIFI_PASSWORD` to a read-only local account instead (what v1 did). That also works with older self-hosted controllers.
 
-### 2. Run it on the Synology
+### 2. Run it
 
-1. Install **Container Manager** from Package Center.
-2. In File Station, create a folder such as `docker/whoshere` and copy this repository into it.
-3. Copy `.env.example` to `.env` in that folder and fill in at least `UNIFI_URL`, `UNIFI_API_KEY` and `ADMIN_PASSWORD`.
-4. In Container Manager → **Project** → **Create**, pick that folder. It finds `docker-compose.yml` and builds the image.
-5. Open `http://<your-nas>:8085`.
+#### Portainer (recommended)
 
-Prefer not to build on the NAS? In `docker-compose.yml`, replace `build: .` with the `image: ghcr.io/...` line. GitHub Actions publishes an image (Intel and ARM) on every push to `main`.
+1. **Stacks → + Add stack**, name it `whoshere`.
+2. Build method **Repository**:
+   - Repository URL: `https://github.com/ThomasBates-AZ/whoshere2`
+   - Repository reference: `refs/heads/main`
+   - Compose path: `whoshere2/docker-compose.yml`
+3. Optional: turn on **GitOps updates** (polling) so the stack redeploys by itself whenever `main` changes.
+4. **Environment variables → Advanced mode**: paste your settings from [`.env.example`](.env.example). At least `UNIFI_URL`, `UNIFI_API_KEY` and `ADMIN_PASSWORD`; anything left out uses its default.
+5. **Deploy the stack**, then open `http://<docker-host>:8085`. The footer shows the version that's running.
+
+To update later, open the stack and click **Pull and redeploy** (or let GitOps updates do it).
+
+#### Synology Container Manager or plain Docker Compose
+
+1. Copy this folder to the server (on a Synology, e.g. `docker/whoshere` in File Station).
+2. Copy `.env.example` to `.env` next to `docker-compose.yml` and fill in at least `UNIFI_URL`, `UNIFI_API_KEY` and `ADMIN_PASSWORD`.
+3. Container Manager → **Project** → **Create** and pick the folder, or run `docker compose up -d` there.
+4. Open `http://<server>:8085`.
+
+#### Pre-built image
+
+Every merge to `main` publishes `ghcr.io/thomasbates-az/whoshere2` (Intel and ARM, tagged `latest` and the version number). To use it instead of building, swap `build: .` for the `image:` line in `docker-compose.yml`. If the pull is refused, set the package to public under the repository's **Packages** on GitHub.
 
 Data (people, devices, history) lives in the `whoshere-data` Docker volume. It survives updates and rebuilds.
 
