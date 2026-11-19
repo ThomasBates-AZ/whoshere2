@@ -3,6 +3,8 @@
     python -m whoshere                      run the web app + poller (what the container does)
     python -m whoshere poll-once            poll UniFi once and print what it saw (setup check)
     python -m whoshere import-users FILE    import a v1 users.txt
+    python -m whoshere export FILE [--history]          export people/devices for a move
+    python -m whoshere import FILE [--replace]          import an export (or a v1 users.txt)
 """
 from __future__ import annotations
 
@@ -22,6 +24,13 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("poll-once", help="poll UniFi once and print a summary")
     imp = sub.add_parser("import-users", help="import a Who's Here v1 users.txt")
     imp.add_argument("file")
+    exp = sub.add_parser("export", help="export people, devices and location names to a JSON file")
+    exp.add_argument("file", help="file to write, or - for the screen")
+    exp.add_argument("--history", action="store_true", help="include arrival/departure history")
+    imp2 = sub.add_parser("import", help="import an export file (or a v1 users.txt)")
+    imp2.add_argument("file")
+    imp2.add_argument("--replace", action="store_true",
+                      help="delete all people, assignments, location names and history first")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -46,6 +55,33 @@ def main(argv: list[str] | None = None) -> int:
             added, assigned, problems = import_v1(Database(settings.db_path), fh.read())
         print(f"Imported {added} new people, {assigned} devices")
         for p in problems:
+            print(f"  ! {p}")
+        return 0
+
+    if args.cmd == "export":
+        import json
+        from .backup import export_data
+        data = export_data(Database(settings.db_path), include_history=args.history, tz=settings.timezone)
+        text = json.dumps(data, indent=2, ensure_ascii=False)
+        if args.file == "-":
+            print(text)
+        else:
+            with open(args.file, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            print(f"Exported {len(data['people'])} people to {args.file}")
+        return 0
+
+    if args.cmd == "import":
+        from .backup import ImportError_, import_text
+        with open(args.file, encoding="utf-8-sig", errors="replace") as fh:
+            text = fh.read()
+        try:
+            result = import_text(Database(settings.db_path), text, replace=args.replace)
+        except ImportError_ as e:
+            print(f"FAILED: {e}", file=sys.stderr)
+            return 1
+        print(result.summary())
+        for p in result.problems:
             print(f"  ! {p}")
         return 0
 

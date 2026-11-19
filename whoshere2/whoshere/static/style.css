@@ -44,12 +44,16 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .top nav a.on { background: rgba(255,255,255,.2); color: #fff; }
 .top nav a.quiet { opacity: .8; }
 footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 1rem; }
-footer details.revisions { max-width: 640px; margin: .5rem auto 0; text-align: left; }
-footer details.revisions summary { text-align: center; cursor: pointer; font-weight: 500; color: var(--muted); }
-footer details.revisions[open] { background: var(--card); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); padding: .75rem 1rem; }
-footer details.revisions h3 { font-size: .9rem; margin: .75rem 0 .25rem; color: var(--ink); }
-footer details.revisions ul { margin: 0; padding-left: 1.2rem; }
-footer details.revisions li { margin: .15rem 0; }
+footer a { color: var(--muted); }
+.revision { margin-bottom: 1rem; }
+.revision h2 { margin: 0 0 .4rem; font-size: 1.15rem; }
+.revision h2 .muted { font-weight: 400; font-size: .95rem; }
+.revision ul { margin: 0; padding-left: 1.25rem; }
+.revision li { margin: .2rem 0; }
+.revision.current { box-shadow: 0 0 0 2px var(--brand); }
+.chip.current { background: var(--brand); border-color: var(--brand); color: #fff; }
+.choice { display: block; font-weight: 400 !important; margin: .35rem 0; }
+.choice input { width: auto !important; display: inline !important; margin: 0 .4rem 0 0 !important; }
 
 /* the verdict */
 .verdict { border-radius: var(--radius); padding: 1.4rem 1.6rem; margin-bottom: 1rem; border: 2px solid; }

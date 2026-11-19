@@ -307,3 +307,90 @@ def test_changelog_matches_version():
     from whoshere.changelog import CHANGELOG
     assert CHANGELOG[0]["version"] == __version__, "add a CHANGELOG entry for the new version"
     assert all(c["changes"] for c in CHANGELOG)
+
+
+# ---------------------------------------------------------------- export / import
+
+def _seed_site(db):
+    t0 = 8_000_000.0
+    a = add_person(db, "Alex Rivera", PHONE)
+    add_person(db, "Sam Ortiz", "28:de:cf:88:f7:a2")
+    add_person(db, "No Phone")
+    presence.apply_snapshot(db, snap({PHONE: AP1, "3c:22:fb:10:20:30": AP2}, t0), GRACE)
+    db.run("INSERT INTO events (person_id, kind, at, uplink, device_mac) VALUES (?, 'arrive', ?, ?, ?)",
+           (a, t0 - 3600, AP1, PHONE))
+    db.run("INSERT INTO events (person_id, kind, at, uplink) VALUES (?, 'depart', ?, ?)", (a, t0 - 600, AP2))
+    db.run("UPDATE locations SET alias = 'Sanctuary' WHERE mac = ?", (AP1,))
+    db.run("UPDATE devices SET ignored = 1 WHERE mac = '3c:22:fb:10:20:30'")
+    db.run("UPDATE people SET active = 0 WHERE name = 'No Phone'")
+    return a
+
+
+def test_export_import_roundtrip(tmp_path):
+    import json
+    from whoshere.backup import export_data, import_text
+    old = Database(tmp_path / "old.db")
+    _seed_site(old)
+    data = export_data(old, include_history=True)
+    assert data["format"] == "whoshere-export" and len(data["people"]) == 3
+    assert "history" in data and len(data["history"]) >= 1
+
+    new = Database(tmp_path / "new.db")
+    r = import_text(new, json.dumps(data))
+    assert (r.people_added, r.devices_assigned, r.locations_named) == (3, 2, 1)
+    assert r.events_added == len(data["history"])
+    people = {p["name"]: p for p in new.all("SELECT * FROM people")}
+    assert people["No Phone"]["active"] == 0
+    owner = new.one("SELECT p.name FROM devices d JOIN people p ON p.id = d.person_id WHERE d.mac = ?", (PHONE,))
+    assert owner["name"] == "Alex Rivera"
+    assert new.one("SELECT alias FROM locations WHERE mac = ?", (AP1,))["alias"] == "Sanctuary"
+    assert new.one("SELECT ignored FROM devices WHERE mac = '3c:22:fb:10:20:30'")["ignored"] == 1
+
+    # Importing again changes nothing
+    r2 = import_text(new, json.dumps(data))
+    assert r2.people_added == 0 and r2.events_added == 0
+    assert new.one("SELECT COUNT(*) AS n FROM people")["n"] == 3
+
+
+def test_export_without_history(db):
+    from whoshere.backup import export_data
+    _seed_site(db)
+    assert "history" not in export_data(db)
+
+
+def test_import_merge_keeps_existing_and_reports_conflicts(db):
+    import json
+    from whoshere.backup import import_text
+    add_person(db, "Already Here", "aa:aa:aa:aa:aa:01")
+    add_person(db, "Owner", PHONE)
+    data = {"format": "whoshere-export", "format_version": 1, "people": [
+        {"id": 1, "name": "alex rivera", "devices": [{"mac": PHONE}]},
+        {"id": 2, "name": "Owner", "devices": [{"mac": "90-83-3E-7D-D3-6B"}]},
+    ]}
+    r = import_text(db, json.dumps(data))
+    assert r.people_added == 1 and r.people_updated == 1
+    assert any("already belongs to Owner" in p for p in r.problems)
+    assert db.one("SELECT COUNT(*) AS n FROM people")["n"] == 3
+
+
+def test_import_replace_wipes_first(db):
+    import json
+    from whoshere.backup import import_text
+    _seed_site(db)
+    data = {"format": "whoshere-export", "format_version": 1,
+            "people": [{"id": 9, "name": "Only One", "devices": [{"mac": "f4:0f:24:11:22:33"}]}]}
+    import_text(db, json.dumps(data), replace=True)
+    assert [r["name"] for r in db.all("SELECT name FROM people")] == ["Only One"]
+    assert db.all("SELECT * FROM events") == []
+    assert db.one("SELECT alias FROM locations WHERE mac = ?", (AP1,))["alias"] is None
+    assert db.one("SELECT person_id FROM devices WHERE mac = ?", (PHONE,))["person_id"] is None
+
+
+def test_import_detects_v1_and_rejects_junk(db):
+    from whoshere.backup import ImportError_, import_text
+    r = import_text(db, "﻿Alex Rivera  90:83:3e:7d:d3:6b\n")
+    assert r.people_added == 1
+    for bad in ["", "{not json", '{"format": "other"}',
+                '{"format": "whoshere-export", "format_version": 99, "people": []}']:
+        with pytest.raises(ImportError_):
+            import_text(db, bad)

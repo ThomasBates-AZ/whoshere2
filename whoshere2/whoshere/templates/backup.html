@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Backup · {{ title }}{% endblock %}
+{% block content %}
+<h1>Backup</h1>
+<p class="muted">Move Who's Here to a new server: export here, then import the file on the new one. UniFi settings and passwords live in the <code>.env</code> file, so copy that too.</p>
+
+<section class="card">
+  <h2>Export</h2>
+  <p>Downloads a file with your {{ counts.people }} {{ "person" if counts.people == 1 else "people" }}, their {{ counts.devices }} device{{ "" if counts.devices == 1 else "s" }}, {{ counts.aliases }} custom location name{{ "" if counts.aliases == 1 else "s" }} and any hidden devices.</p>
+  <form method="get" action="/admin/export" class="inline">
+    <label class="choice"><input type="checkbox" name="history" value="1"> Include arrival &amp; departure history ({{ counts.events }} entr{{ "y" if counts.events == 1 else "ies" }})</label>
+    <button>Download export</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Import</h2>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Export file (<code>.json</code>) or v1 <code>users.txt</code>
+      <input type="file" name="file" accept=".json,.txt,application/json,text/plain">
+    </label>
+    <details>
+      <summary class="muted">…or paste a list instead</summary>
+      <textarea name="text" rows="6" placeholder="Thomas Bates  00:11:22:33:44:55"></textarea>
+    </details>
+
+    <p><strong>How to combine with what's already here</strong></p>
+    <label class="choice"><input type="radio" name="mode" value="merge" checked>
+      <strong>Add to this server</strong> — people are matched by name; nobody here is removed. Safe to run more than once.</label>
+    <label class="choice"><input type="radio" name="mode" value="replace">
+      <strong>Replace everything</strong> — delete all people, device assignments, location names and history here first.</label>
+    <label class="choice" style="margin-left:1.6rem">To replace, type <code>REPLACE</code>: <input name="confirm" size="10" autocomplete="off" style="width:auto;display:inline"></label>
+    <p><button>Import</button></p>
+  </form>
+</section>
+{% endblock %}
