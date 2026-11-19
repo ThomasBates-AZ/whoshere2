@@ -38,6 +38,7 @@ class ClientInfo:
     name: str            # UniFi's display name (alias if set, otherwise hostname)
     uplink_mac: str | None  # access point (or switch, for wired clients) it's attached to
     wired: bool = False
+    ip: str | None = None   # current IPv4 address, used to recognize a phone on the self-register page
 
 
 @dataclass(frozen=True)
@@ -195,6 +196,7 @@ class IntegrationClient(_Http):
                 name=c.get("name") or "",
                 uplink_mac=by_id.get(str(c.get("uplinkDeviceId"))),
                 wired=str(c.get("type", "")).upper() == "WIRED",
+                ip=c.get("ipAddress") or None,
             ))
         return Snapshot(clients=clients, devices=devices)
 
@@ -269,8 +271,18 @@ class SessionClient(_Http):
                 name=c.get("name") or c.get("hostname") or "",
                 uplink_mac=normalize_mac(c.get("sw_mac") if wired else c.get("ap_mac")),
                 wired=wired,
+                ip=c.get("ip") or None,
             ))
         return Snapshot(clients=clients, devices=devices)
+
+
+def find_client_by_ip(snap: Snapshot, ip: str | None) -> ClientInfo | None:
+    """The connected client that currently has this IP address, if UniFi knows of exactly one."""
+    if not ip:
+        return None
+    ip = ip.removeprefix("::ffff:")  # IPv4-mapped IPv6, as some sockets report it
+    matches = [c for c in snap.clients if c.ip == ip]
+    return matches[0] if len(matches) == 1 else None
 
 
 def make_client(settings: Settings):

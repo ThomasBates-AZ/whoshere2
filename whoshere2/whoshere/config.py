@@ -45,6 +45,11 @@ class Settings:
     history_days: int           # how long arrival/departure history is kept
     device_retention_days: int  # unassigned devices not seen for this long are forgotten
 
+    # Self-registration (/register): staff add their own phone
+    self_register: bool
+    register_code: str
+    staff_wifi: str
+
     # Web
     title: str
     admin_password: str
@@ -89,6 +94,9 @@ class Settings:
             stale_after=_int("STALE_AFTER_SECONDS", max(poll * 3, 180), minimum=poll),
             history_days=_int("HISTORY_DAYS", 365, minimum=1),
             device_retention_days=_int("DEVICE_RETENTION_DAYS", 30, minimum=1),
+            self_register=_bool("SELF_REGISTER", False),
+            register_code=os.environ.get("REGISTER_CODE", "").strip(),
+            staff_wifi=_str("STAFF_WIFI_NAME") or "the staff Wi-Fi",
             title=_str("SITE_TITLE", "Who's Here?") or "Who's Here?",
             admin_password=os.environ.get("ADMIN_PASSWORD", ""),
             view_password=os.environ.get("VIEW_PASSWORD", ""),

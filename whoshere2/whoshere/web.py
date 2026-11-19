@@ -25,6 +25,7 @@ from .db import Database
 from .importer import import_v1
 from .macutil import is_randomized, normalize_mac
 from .poller import Poller
+from .unifi import UniFiError, find_client_by_ip, make_client
 
 log = logging.getLogger("whoshere.web")
 HERE = Path(__file__).parent
@@ -81,7 +82,8 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.filters.update(make_filters(settings.timezone))
     templates.env.globals.update(title=settings.title, version=__version__,
-                                 is_randomized=is_randomized)
+                                 is_randomized=is_randomized, self_register=settings.self_register,
+                                 staff_wifi=settings.staff_wifi)
 
     # ----- helpers
 
@@ -174,6 +176,75 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         people = db.all("SELECT id, name FROM people ORDER BY name COLLATE NOCASE")
         return render(request, "history.html", grouped=grouped, people=people,
                       days=days, person=person, truncated=len(events) >= 2000)
+
+    # ----- self-registration: staff add their own phone
+
+    def lookup_visitor(request: Request):
+        """Blocking; run in a thread. Asks UniFi which client has the visitor's IP.
+
+        Returns (client or None, error message or None). The MAC always comes from
+        UniFi, never from the browser, so nobody can register a device they aren't holding.
+        """
+        ip = request.client.host if request.client else None
+        try:
+            snap = make_client(settings).snapshot()
+        except UniFiError as e:
+            log.warning("Self-register lookup failed: %s", e)
+            return None, "unifi"
+        return find_client_by_ip(snap, ip), None
+
+    async def register_page(request: Request):
+        if not settings.self_register:
+            return render(request, "register.html", step="disabled")
+        client, error = await asyncio.to_thread(lookup_visitor, request)
+        ip = request.client.host if request.client else ""
+        if error:
+            return render(request, "register.html", step="unifi_error", ip=ip)
+        if client is None:
+            return render(request, "register.html", step="not_found", ip=ip)
+        if is_randomized(client.mac):
+            return render(request, "register.html", step="private", client=client)
+
+        owner = db.one("SELECT p.id, p.name FROM devices d JOIN people p ON p.id = d.person_id "
+                       "WHERE d.mac = ?", (client.mac,))
+        if owner:
+            return render(request, "register.html", step="already", client=client, owner=owner)
+
+        if request.method == "POST":
+            form = await checked_form(request)
+            if form is None:
+                flash(request, "Your session expired; please try again.", "error")
+                return back("/register")
+            name = " ".join(str(form.get("name", "")).split())[:80]
+            if settings.register_code:
+                await asyncio.sleep(0.5)  # slow down guessing
+                if not hmac.compare_digest(str(form.get("code", "")).strip(), settings.register_code):
+                    flash(request, "That registration code isn't right.", "error")
+                    return back("/register")
+            if not name:
+                flash(request, "Please enter your name.", "error")
+                return back("/register")
+            with db.connect() as conn:
+                row = conn.execute("SELECT id, name FROM people WHERE lower(name) = lower(?) "
+                                   "ORDER BY active DESC, id LIMIT 1", (name,)).fetchone()
+                if row:
+                    pid, name = row["id"], row["name"]
+                    conn.execute("UPDATE people SET active = 1 WHERE id = ?", (pid,))
+                else:
+                    pid = conn.execute("INSERT INTO people (name, created_at) VALUES (?, ?)",
+                                       (name, time.time())).lastrowid
+                conn.execute(
+                    """INSERT INTO devices (mac, person_id, client_name, first_seen, last_seen, connected)
+                       VALUES (?, ?, ?, ?, ?, 1)
+                       ON CONFLICT(mac) DO UPDATE SET person_id = excluded.person_id, ignored = 0""",
+                    (client.mac, pid, client.name, time.time(), time.time()))
+            log.info("Self-registered %s (%s) for %s from %s", client.mac, client.name, name,
+                     request.client.host if request.client else "?")
+            poller.request_poll()
+            return render(request, "register.html", step="done", client=client, person_name=name)
+
+        return render(request, "register.html", step="form", client=client,
+                      need_code=bool(settings.register_code))
 
     # ----- login
 
@@ -435,6 +506,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         Route("/history", history_page),
         Route("/api/status", api_status),
         Route("/healthz", healthz),
+        Route("/register", register_page, methods=["GET", "POST"]),
         Route("/login", login, methods=["GET", "POST"]),
         Route("/logout", logout),
         Route("/admin", admin_root),

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Add my phone · {{ title }}{% endblock %}
+{% block content %}
+<h1>Add my phone</h1>
+
+{% if step == 'disabled' %}
+  <div class="card">
+    <p>Self-registration is turned off. Ask an administrator to add your phone.</p>
+  </div>
+
+{% elif step == 'unifi_error' %}
+  <div class="flash error">The Wi-Fi system isn't answering right now, so your phone can't be checked.</div>
+  <p>Please try again in a few minutes, or ask an administrator to add you.</p>
+  <p><a class="button" href="/register">Try again</a></p>
+
+{% elif step == 'not_found' %}
+  <div class="flash warn">Your phone wasn't found on the Wi-Fi.</div>
+  <p>Open this page <strong>on the phone you want to add</strong>, while it's connected to
+    <strong>{{ staff_wifi }}</strong>. Turn off cellular data if you need to, so the page loads over Wi-Fi.</p>
+  <p class="note">Address seen: <span class="mono">{{ ip or 'unknown' }}</span>. If you just connected, wait a minute and try again.</p>
+  <p><a class="button" href="/register">Try again</a></p>
+
+{% elif step == 'private' %}
+  <div class="flash warn">Your phone is using a <strong>private Wi-Fi address</strong> on {{ staff_wifi }}.</div>
+  <p>A private address changes over time, so the board would lose track of you. Turn it off for
+    {{ staff_wifi }} only, then come back to this page.</p>
+  {% include "_private_wifi_help.html" %}
+  <p><a class="button" href="/register">I've turned it off. Check again</a></p>
+
+{% elif step == 'already' %}
+  <div class="flash ok">This phone is already registered to <strong>{{ owner.name }}</strong>. You're all set.</div>
+  <p>If that isn't you, ask an administrator to fix it.</p>
+  <p><a href="/">Go to the board</a></p>
+
+{% elif step == 'done' %}
+  <div class="flash ok">Done. <strong>{{ client.name or 'This phone' }}</strong> is now registered to <strong>{{ person_name }}</strong>.</div>
+  <p>You'll show as <strong>Here</strong> on the board within a minute or two.</p>
+  <p class="note">Keep Private Wi-Fi Address turned off for {{ staff_wifi }}, or the board will lose track of you.</p>
+  <p><a class="button" href="/">Go to the board</a></p>
+
+{% else %}
+  <form method="post" class="card narrow">
+    <p>Found your phone{% if client.name %}: <strong>{{ client.name }}</strong>{% endif %}.</p>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Your name <input name="name" required maxlength="80" autocomplete="name" placeholder="First and last name"></label>
+    {% if need_code %}
+      <label>Registration code <input name="code" required autocomplete="off"></label>
+    {% endif %}
+    <button>Add my phone</button>
+    <p class="note">If you're already on the board, use the same name so this phone is added to you.</p>
+  </form>
+{% endif %}
+{% endblock %}
