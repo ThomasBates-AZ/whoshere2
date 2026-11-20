@@ -114,6 +114,96 @@ Phones keep Private Wi-Fi Address per network, so staff need it **off on each st
 
 With an API key, the network names come from UniFi's classic client list, read with the same key. If a console doesn't allow that, everything else keeps working without network names, and **Status** says so.
 
+## Google Chat
+
+Staff can ask Who's Here from Google Chat:
+
+| Command | What it does |
+|---|---|
+| `/whoshere` | Who's on campus right now, and where |
+| `/whoshere Thomas` | Everyone whose name contains "Thomas": here (where, since when) or last seen |
+| `/allclear` | Is it safe to arm the alarm? All clear, who's still here (and who may be leaving), or "can't confirm" if UniFi data is out of date |
+| `/history` / `/history Thomas` | Today's arrivals and departures |
+
+In a direct message with the app, plain words work too: "all clear?", a name, "history", "help". In a shared space, replies are visible only to the person who asked (change with `GOOGLE_CHAT_PRIVATE_REPLIES=false`).
+
+**How it connects:** Google Chat puts each message for the app into a Google Cloud **Pub/Sub** queue, and Who's Here fetches from that queue and replies through the Chat API. All connections go *out* from your server, so nothing on your network is opened to the internet, and it works behind the church firewall.
+
+**What you need:** a Google Workspace edition that includes Google Chat, admin access to Google Cloud for your domain, and a Google Cloud project with **billing enabled**. Pub/Sub is required to have billing on, though a handful of messages a day should fall well within its free tier.
+
+### Step 1: Create the Google Cloud project
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com), signed in with your Workspace account.
+2. Create a project, e.g. **whoshere**, under your organization. Note its **project ID** (e.g. `ironwood-whoshere`).
+3. **APIs & Services → Library**: enable **Google Chat API** and **Cloud Pub/Sub API**.
+
+### Step 2: Create the Pub/Sub topic and subscription
+
+1. **Pub/Sub → Topics → Create topic**, ID `whoshere-chat`. Untick *Add a default subscription*.
+2. Open the topic → **Permissions** → **Add principal**: `chat-api-push@system.gserviceaccount.com`, role **Pub/Sub Publisher**. This lets Google Chat put messages in the queue.
+3. **Pub/Sub → Subscriptions → Create subscription**:
+   - Subscription ID: `whoshere-chat`
+   - Topic: `projects/<project-id>/topics/whoshere-chat`
+   - Delivery type: **Pull**
+   - Expiration period: **Never expire**
+   - Leave the rest as is.
+
+### Step 3: Create the service account (Who's Here's identity)
+
+1. **IAM & Admin → Service Accounts → Create service account**, name `whoshere-chat`. It needs no project roles; skip those steps.
+2. Open the subscription from step 2 → **Permissions** → **Add principal**: the service account's email (`whoshere-chat@<project-id>.iam.gserviceaccount.com`), role **Pub/Sub Subscriber**.
+3. Open the service account → **Keys → Add key → Create new key → JSON**. A `.json` file downloads. Keep it private: it's a password for the app, and Google disables keys it finds published online. Never put it in GitHub.
+
+> **"Key creation is disabled"?** Google Cloud organizations created since May 2024 block service account keys by default. An organization admin can allow them for just this project: **IAM & Admin → Organization Policies** (with the project selected) → *Disable service account key creation* (`iam.managed.disableServiceAccountKeyCreation`, or the older `iam.disableServiceAccountKeyCreation`) → **Manage policy** → **Override parent's policy** → **Not enforced** → Save. This needs the *Organization Policy Administrator* role.
+
+### Step 4: Configure the Chat app
+
+**APIs & Services → Enabled APIs → Google Chat API → Configuration**:
+
+- **Build this Chat app as a Google Workspace add-on**: if this box is shown and ticked, untick it and confirm **Disable**. (Who's Here understands both formats, but these steps assume it's off.)
+- **App name**: `Who's Here`
+- **Avatar URL**: `https://raw.githubusercontent.com/ThomasBates-AZ/whoshere2/main/whoshere2/docs/chat-avatar.png`
+- **Description**: `Who's on campus, and is it safe to arm?`
+- **Functionality**: tick **Join spaces and group conversations** if you want to use it in spaces as well as direct messages.
+- **Connection settings**: **Cloud Pub/Sub**, topic `projects/<project-id>/topics/whoshere-chat`. If this section shows a service account email, give that account **Pub/Sub Publisher** on the topic as well, as in step 2.
+- **Commands → Add a command**, three times, each as a **Slash command**:
+
+  | Command ID | Name | Description |
+  |---|---|---|
+  | `1` | `/whoshere` | Who's on campus. Add a name to look someone up |
+  | `2` | `/allclear` | Is it safe to arm the alarm? |
+  | `3` | `/history` | Today's arrivals and departures |
+
+  The IDs must be exactly these. The admin page in Who's Here lists them too.
+- **Visibility**: *Make this Chat app available to specific people and groups in your domain*, and enter the people or a Google Group (e.g. `staff@yourchurch.org`). Only they can find and use the app.
+- **Logs**: *Log errors to Logging*.
+- **Save**.
+
+### Step 5: Turn it on in Who's Here
+
+1. Add to the stack's environment variables in Portainer, then **Update the stack**:
+   ```
+   GOOGLE_CHAT_SUBSCRIPTION=projects/<project-id>/subscriptions/whoshere-chat
+   BOARD_URL=http://<your-server>:8085
+   ```
+   `BOARD_URL` is optional and adds an "Open the board" link to replies. `GOOGLE_CHAT_ALLOWED` (optional) limits who may use it, e.g. `@yourchurch.org` or a list of emails.
+2. In Who's Here, **Admin → Google Chat**: upload the `.json` key from step 3, click **Test the key**, and check that the status says **Connected**.
+
+### Step 6: Use it
+
+- In Google Chat, click **New chat**, search for **Who's Here**, and send `/whoshere`.
+- To add it to a space: open the space → space name → **Apps & integrations** → **Add apps** → **Who's Here**.
+
+If staff can't find or add the app, a Workspace admin should check **admin.google.com → Apps → Google Workspace → Google Chat → Chat apps** and allow users to install Chat apps.
+
+### Troubleshooting
+
+The **Google Chat** admin page shows what's wrong in plain words:
+- **"Google rejected the service account key"**: upload a fresh key.
+- **"Not allowed to read…"**: the service account is missing **Pub/Sub Subscriber** on the subscription.
+- **"Subscription … not found"**: check `GOOGLE_CHAT_SUBSCRIPTION` against the full name shown in Pub/Sub.
+- **Connected, but the app never answers**: Chat can't publish to the topic. Recheck the **Pub/Sub Publisher** grant in step 2, and the topic name in the Chat app's connection settings.
+
 ## How it decides
 
 - Someone is **Here** as soon as any of their devices is connected, and their location is the access point it's connected to. If they have both a phone and a laptop, the phone (wireless) wins.
@@ -145,6 +235,10 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 | `SELF_REGISTER` | `false` | Turn on the `/register` page so staff can add their own phone |
 | `REGISTER_CODE` | | Optional code staff must enter on `/register` |
 | `WIFI_NETWORKS` | | Staff Wi-Fi networks, comma-separated, e.g. `Ironwood Staff, Ironwood Office`. Filters the Devices list and "Add my phone"; doesn't change who counts as here |
+| `GOOGLE_CHAT_SUBSCRIPTION` | | Turns on Google Chat: `projects/<project-id>/subscriptions/<name>` (see [Google Chat](#google-chat)) |
+| `GOOGLE_CHAT_ALLOWED` | | Emails and/or `@domains` allowed to use the Chat app; empty = anyone it's shared with |
+| `GOOGLE_CHAT_PRIVATE_REPLIES` | `true` | In shared spaces, only the person who asked sees the reply |
+| `BOARD_URL` | | Link to the board added to Chat replies |
 | `NETWORK_MODE` | `bridge` | `host` lets "Add my phone" see phones' real addresses (needed on Synology). The board is then on `PORT` |
 | `HOST_PORT` | `8085` | Port for the board in bridge mode |
 | `PORT` | `8080` | Port the app listens on (the board's port in host mode) |

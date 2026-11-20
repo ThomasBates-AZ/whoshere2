@@ -7,6 +7,20 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "3.0.0",
+        "date": "2026-11-20",
+        "changes": [
+            "Google Chat app: /whoshere lists who's on campus, /whoshere Thomas looks people up by name",
+            "/allclear answers \"is it safe to arm?\": all clear, who's still here (and who may be leaving), or can't confirm when UniFi data is stale",
+            "/history shows today's arrivals and departures, for everyone or one person",
+            "In a direct message, plain words work too: \"all clear?\", a name, \"history\", \"help\"",
+            "Connects through Google Pub/Sub, so nothing on your network is opened to the internet",
+            "In shared spaces, replies go only to the person who asked (GOOGLE_CHAT_PRIVATE_REPLIES)",
+            "Optional GOOGLE_CHAT_ALLOWED limits who can use it; BOARD_URL adds a link to the board",
+            "New Google Chat admin page: upload the service account key, test it, see connection status and the commands to set up",
+        ],
+    },
+    {
         "version": "2.6.0",
         "date": "2026-11-19",
         "changes": [

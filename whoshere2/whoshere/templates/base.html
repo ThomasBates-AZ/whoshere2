@@ -21,6 +21,7 @@
       <a href="/admin/locations" {% if path.startswith('/admin/locations') %}class="on"{% endif %}>Locations</a>
       <a href="/admin/status" {% if path.startswith('/admin/status') %}class="on"{% endif %}>Status</a>
       <a href="/admin/backup" {% if path.startswith('/admin/backup') %}class="on"{% endif %}>Backup</a>
+      <a href="/admin/chat" {% if path.startswith('/admin/chat') %}class="on"{% endif %}>Google Chat</a>
     {% endif %}
     {% if role %}<a href="/logout" class="quiet">Sign out</a>
     {% elif admin_enabled %}<a href="/login?next=/admin/people" class="quiet">Admin</a>{% endif %}

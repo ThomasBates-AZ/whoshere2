@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +52,12 @@ class Settings:
     staff_wifi: str
     show_wifi_network: bool          # show which Wi-Fi network people/devices are on
     wifi_networks: tuple[str, ...]   # the staff networks to watch; empty = all
+    # Google Chat (all optional; Chat is on when chat_subscription is set)
+    chat_subscription: str           # projects/<project>/subscriptions/<subscription>
+    chat_key_file: Path
+    chat_allowed: tuple[str, ...]  # emails and @domains allowed to use the app; empty = anyone
+    chat_private_replies: bool     # in shared spaces, answer only the person who asked
+    board_url: str                 # link added to Chat replies, e.g. http://whoshere.local:8085
 
     # Web
     title: str
@@ -108,6 +115,11 @@ class Settings:
             register_code=os.environ.get("REGISTER_CODE", "").strip(),
             staff_wifi=_str("STAFF_WIFI_NAME") or " or ".join(wifi_networks) or "the staff Wi-Fi",
             show_wifi_network=_bool("SHOW_WIFI_NETWORK", True),
+            chat_subscription=_chat_subscription(),
+            chat_key_file=Path(_str("GOOGLE_CHAT_KEY_FILE") or str(data_dir / "google-chat-key.json")),
+            chat_allowed=tuple(a.strip().lower() for a in _str("GOOGLE_CHAT_ALLOWED").split(",") if a.strip()),
+            chat_private_replies=_bool("GOOGLE_CHAT_PRIVATE_REPLIES", True),
+            board_url=_str("BOARD_URL").rstrip("/"),
             wifi_networks=wifi_networks,
             title=_str("SITE_TITLE", "Who's Here?") or "Who's Here?",
             admin_password=os.environ.get("ADMIN_PASSWORD", ""),
@@ -116,6 +128,20 @@ class Settings:
             timezone=tz,
             data_dir=data_dir,
         )
+
+
+def _chat_subscription() -> str:
+    """Full subscription path, from GOOGLE_CHAT_SUBSCRIPTION (or project + short id)."""
+    sub = _str("GOOGLE_CHAT_SUBSCRIPTION")
+    project = _str("GOOGLE_CHAT_PROJECT")
+    if sub and not sub.startswith("projects/"):
+        if not project:
+            raise SystemExit("GOOGLE_CHAT_SUBSCRIPTION must look like projects/<project>/subscriptions/<name>, "
+                             "or set GOOGLE_CHAT_PROJECT too")
+        sub = f"projects/{project}/subscriptions/{sub}"
+    if sub and not re.match(r"^projects/[^/]+/subscriptions/[^/]+$", sub):
+        raise SystemExit(f"GOOGLE_CHAT_SUBSCRIPTION {sub!r} should look like projects/<project>/subscriptions/<name>")
+    return sub
 
 
 def _load_or_create_secret(data_dir: Path) -> str:
