@@ -188,7 +188,8 @@ def _verdict_line(b, f) -> str:
 
 
 def _footer(settings: Settings) -> str:
-    return f"\n<{settings.board_url}|Open the board>" if settings.board_url else ""
+    # Plain URL: Chat turns it into a link itself. The <url|label> form broke on some setups.
+    return f"\nBoard: {settings.board_url}" if settings.board_url else ""
 
 
 def on_campus_text(db, settings, f, now=None) -> str:

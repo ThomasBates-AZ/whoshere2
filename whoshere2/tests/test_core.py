@@ -663,7 +663,8 @@ def test_chat_replies(db, monkeypatch, tmp_path):
     assert "Not clear — 1 person on campus" in out
     assert "*Alex Rivera* — Sound Booth · Ironwood Staff" in out
     assert "Not tracked" in out and "Jordan Lee" in out
-    assert out.endswith("<http://whoshere.local:8085|Open the board>")
+    assert out.endswith("\nBoard: http://whoshere.local:8085")
+    assert "|" not in out
 
     out = ask(slash_event(1, "/whoshere thomas", " thomas"))
     assert "*Thomas Bates*" in out and "*Thomas Nguyen*" in out and "Alex" not in out
