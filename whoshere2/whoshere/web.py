@@ -27,6 +27,9 @@ from .db import Database
 from .backup import ImportError_, export_data, import_text
 from .importer import import_v1
 from .netcheck import masked_by_docker
+from .gchat import ChatBridge, ChatSetupError, check_key
+from . import chatbot
+from .timefmt import make_filters
 from .macutil import is_randomized, normalize_mac
 from .poller import Poller
 from .unifi import UniFiError, find_client_by_ip, make_client
@@ -37,52 +40,12 @@ HERE = Path(__file__).parent
 
 # --------------------------------------------------------------------------- time formatting
 
-def make_filters(tz):
-    def local(ts):
-        return datetime.fromtimestamp(ts, tz)
-
-    def when(ts):
-        if not ts:
-            return "—"
-        dt, now = local(ts), datetime.now(tz)
-        clock = dt.strftime("%-I:%M %p")
-        if dt.date() == now.date():
-            return clock
-        if dt.date() == (now - timedelta(days=1)).date():
-            return f"Yesterday {clock}"
-        if (now.date() - dt.date()).days < 7:
-            return f"{dt.strftime('%a')} {clock}"
-        if dt.year == now.year:
-            return f"{dt.strftime('%b %-d')}, {clock}"
-        return f"{dt.strftime('%b %-d, %Y')}, {clock}"
-
-    def ago(ts):
-        if not ts:
-            return "never"
-        s = max(0, int(time.time() - ts))
-        if s < 60:
-            return "just now"
-        if s < 3600:
-            return f"{s // 60} min ago"
-        if s < 86400:
-            return f"{s // 3600} hr ago"
-        days = s // 86400
-        return f"{days} day{'s' if days != 1 else ''} ago"
-
-    def clock(ts):
-        return local(ts).strftime("%-I:%M %p") if ts else "—"
-
-    def day(ts):
-        return local(ts).strftime("%A, %B %-d, %Y")
-
-    return {"when": when, "ago": ago, "clock": clock, "day": day}
-
-
 # --------------------------------------------------------------------------- app
 
 def create_app(settings: Settings, db: Database | None = None, start_poller: bool = True) -> Starlette:
     db = db or Database(settings.db_path)
     poller = Poller(settings, db)
+    chat = ChatBridge(settings, db)
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.filters.update(make_filters(settings.timezone))
     templates.env.globals.update(title=settings.title, version=__version__, changelog=CHANGELOG,
@@ -568,6 +531,67 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
 
     # ----- revision history
 
+    # ----- admin: Google Chat
+
+    async def chat_page(request: Request):
+        if (r := admin_guard(request)):
+            return r
+        if request.method == "POST":
+            form = await checked_form(request)
+            if form is None:
+                flash(request, "Your session expired; please try again.", "error")
+                return back("/admin/chat")
+            action = form.get("action")
+            if action == "upload":
+                upload = form.get("key")
+                raw = (await upload.read()) if upload is not None and hasattr(upload, "read") else b""
+                if not raw.strip():
+                    raw = str(form.get("key_text", "")).encode()
+                try:
+                    key = check_key(json.loads(raw.decode("utf-8-sig")))
+                except ValueError:
+                    flash(request, "That file isn't valid JSON. Upload the .json key you downloaded from Google Cloud.", "error")
+                    return back("/admin/chat")
+                except ChatSetupError as e:
+                    flash(request, str(e), "error")
+                    return back("/admin/chat")
+                path = settings.chat_key_file
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(key))
+                try:
+                    tmp.chmod(0o600)
+                except OSError:
+                    pass
+                tmp.replace(path)
+                chat.reset()
+                flash(request, f"Key saved for {key['client_email']}.")
+            elif action == "remove":
+                try:
+                    settings.chat_key_file.unlink()
+                except FileNotFoundError:
+                    pass
+                chat.reset()
+                flash(request, "Service account key removed.")
+            elif action == "test":
+                try:
+                    email = await asyncio.to_thread(chat.check)
+                    flash(request, f"Google accepted the key for {email}.")
+                except ChatSetupError as e:
+                    flash(request, str(e), "error")
+                except ConnectionError as e:
+                    flash(request, f"Can't reach Google: {e}", "error")
+            return back("/admin/chat")
+
+        key_email, key_error = None, None
+        if settings.chat_key_file.exists():
+            try:
+                key_email = json.loads(settings.chat_key_file.read_text()).get("client_email")
+            except (OSError, ValueError):
+                key_error = "The saved key can't be read. Upload it again."
+        return render(request, "chat.html", chat=chat, key_email=key_email, key_error=key_error,
+                      commands=sorted(chatbot.COMMANDS.items()), s=settings)
+
     async def revisions_page(request: Request):
         if not can_view(request):
             return to_login(request)
@@ -578,13 +602,15 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     @contextlib.asynccontextmanager
     async def lifespan(app):
         task = asyncio.create_task(poller.run()) if start_poller else None
+        chat_task = asyncio.create_task(chat.run()) if start_poller and chat.enabled else None
         if not settings.admin_password:
             log.warning("ADMIN_PASSWORD is not set; admin pages are disabled")
         yield
-        if task:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        for t in (task, chat_task):
+            if t:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await t
 
     routes = [
         Route("/", board_page),
@@ -603,6 +629,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         Route("/admin/backup", backup_page, methods=["GET", "POST"]),
         Route("/admin/export", export_download),
         Route("/revisions", revisions_page),
+        Route("/admin/chat", chat_page, methods=["GET", "POST"]),
         Mount("/static", StaticFiles(directory=str(HERE / "static")), name="static"),
     ]
     middleware = [Middleware(SessionMiddleware, secret_key=settings.secret_key,
@@ -611,4 +638,5 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     app = Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
     app.state.db = db
     app.state.poller = poller
+    app.state.chat = chat
     return app

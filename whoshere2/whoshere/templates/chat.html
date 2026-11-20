@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Google Chat · {{ title }}{% endblock %}
+{% block content %}
+<h1>Google Chat</h1>
+<p class="muted">Ask Who's Here from Google Chat: <code>/whoshere</code>, <code>/whoshere Thomas</code>, <code>/allclear</code>, <code>/history</code>. The app pulls messages from Google Pub/Sub, so nothing on your network has to be opened to the internet. Setup steps are in the README under "Google Chat".</p>
+
+<section class="card">
+  <h2>Status</h2>
+  {% if not chat.enabled %}
+    <div class="flash warn">Off. Set <code>GOOGLE_CHAT_SUBSCRIPTION</code> in the stack's environment variables and redeploy to turn it on.</div>
+  {% elif chat.last_error %}
+    <div class="flash error">{{ chat.last_error }}</div>
+  {% elif chat.last_pull_ok %}
+    <div class="flash ok">Connected. Listening for messages{% if chat.last_event_at %}; last message {{ chat.last_event_at|ago }}{% endif %}.</div>
+  {% else %}
+    <div class="flash warn">Starting up…</div>
+  {% endif %}
+  {% if chat.last_reply_error %}<div class="flash warn">Last reply that couldn't be sent: {{ chat.last_reply_error }}</div>{% endif %}
+  <table class="list kv">
+    <tr><th>Subscription</th><td class="mono">{{ s.chat_subscription or 'not set' }}</td></tr>
+    <tr><th>Service account</th><td>{% if key_email %}<span class="mono">{{ key_email }}</span>{% elif key_error %}<span class="warn-text">{{ key_error }}</span>{% else %}<span class="muted">no key uploaded</span>{% endif %}</td></tr>
+    <tr><th>Who can use it</th><td>{{ s.chat_allowed|join(', ') if s.chat_allowed else "Anyone the Chat app is shared with" }}</td></tr>
+    <tr><th>Replies in shared spaces</th><td>{{ 'Only the person who asked sees them' if s.chat_private_replies else 'Everyone in the space sees them' }}</td></tr>
+    <tr><th>Board link in replies</th><td>{{ s.board_url or '— (set BOARD_URL to add one)' }}</td></tr>
+    <tr><th>Replies sent since start</th><td>{{ chat.replies_sent }}</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Service account key</h2>
+  <p>Upload the JSON key for the service account you created in Google Cloud. It's stored in the app's data volume, readable only by the app.</p>
+  <form method="post" enctype="multipart/form-data" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="upload">
+    <input type="file" name="key" accept=".json,application/json" required>
+    <button>Upload key</button>
+  </form>
+  {% if key_email %}
+  <div class="inline" style="margin-top:.75rem">
+    <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="test"><button class="secondary">Test the key</button></form>
+    <form method="post" onsubmit="return confirm('Remove the Google Chat key?')"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="remove"><button class="danger">Remove key</button></form>
+  </div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Commands to add in Google Cloud</h2>
+  <p class="muted">On the Google Chat API <strong>Configuration</strong> page, under <strong>Commands</strong>, add each of these as a <strong>Slash command</strong> with exactly this ID and name.</p>
+  <table class="list">
+    <thead><tr><th style="width:5rem">ID</th><th style="width:9rem">Name</th><th>Description</th></tr></thead>
+    {% for cid, (name, desc) in commands %}
+      <tr><td class="mono">{{ cid }}</td><td class="mono">{{ name }}</td><td>{{ desc }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

@@ -597,3 +597,180 @@ def test_default_gateway_and_masking(tmp_path):
     assert masked_by_docker("::ffff:172.17.0.1", gateway="172.17.0.1", in_container=True)
     assert not masked_by_docker("192.168.1.50", gateway="172.17.0.1", in_container=True)
     assert not masked_by_docker("172.17.0.1", gateway="172.17.0.1", in_container=False)
+
+
+# ---------------------------------------------------------------- Google Chat
+
+def _chat_settings(monkeypatch, tmp_path, **extra):
+    from whoshere.config import Settings
+    env = {"DATA_DIR": str(tmp_path), "GOOGLE_CHAT_SUBSCRIPTION": "projects/whoshere-test/subscriptions/whoshere-chat",
+           "TZ": "America/Phoenix", "STALE_AFTER_SECONDS": "300", "POLL_INTERVAL_SECONDS": "60"}
+    env.update(extra)
+    for k in ("GOOGLE_CHAT_ALLOWED", "BOARD_URL", "WIFI_NETWORKS", "GOOGLE_CHAT_PRIVATE_REPLIES", "GOOGLE_CHAT_PROJECT"):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    return Settings.from_env()
+
+
+def _campus(db, now):
+    """Alex here in the Sound Booth, Sam left this morning, Jordan untracked, Thomas never seen."""
+    alex = add_person(db, "Alex Rivera", PHONE)
+    sam = add_person(db, "Sam Ortiz", "28:de:cf:88:f7:a2")
+    add_person(db, "Jordan Lee")
+    add_person(db, "Thomas Bates", "f4:0f:24:11:22:33")
+    add_person(db, "Thomas Nguyen", "f4:0f:24:11:22:44")
+    s = snap({PHONE: AP1}, now - 30)
+    s.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Ironwood Staff")]
+    presence.apply_snapshot(db, s, GRACE)
+    db.run("INSERT INTO events (person_id, kind, at, uplink) VALUES (?, 'arrive', ?, ?)", (sam, now - 3600, AP2))
+    db.run("INSERT INTO events (person_id, kind, at, uplink) VALUES (?, 'depart', ?, ?)", (sam, now - 1800, AP2))
+    return alex, sam
+
+
+def test_parse_event_formats():
+    from whoshere.chatbot import parse_event
+    from mock_google import addon_command_event, dm_event, slash_event
+    r = parse_event(slash_event(1, "/whoshere Thomas", " Thomas", space_type="SPACE"))
+    assert (r.kind, r.command_id, r.text, r.space, r.space_type) == ("message", 1, "Thomas", "spaces/AAA", "SPACE")
+    assert r.user_email == "thomas@ironwood.church" and r.thread == "spaces/AAA/threads/T1"
+    # annotation only (no message.slashCommand)
+    e = slash_event(2, "/allclear", "")
+    del e["message"]["slashCommand"]
+    assert parse_event(e).command_id == 2
+    # command recognised by name when IDs are missing
+    e = dm_event("/history Sam")
+    r = parse_event(e)
+    assert (r.command_id, r.text) == (3, "Sam")
+    # Workspace add-on format
+    r = parse_event(addon_command_event(1, "/whoshere Alex"))
+    assert (r.command_id, r.text, r.space, r.space_type) == (1, "Alex", "spaces/BBB", "SPACE")
+    # added / removed
+    assert parse_event({"type": "ADDED_TO_SPACE", "space": {"name": "spaces/C"}}).kind == "added"
+    assert parse_event({"type": "REMOVED_FROM_SPACE", "space": {"name": "spaces/C"}}).kind == "removed"
+
+
+def test_chat_replies(db, monkeypatch, tmp_path):
+    from whoshere.chatbot import parse_event, reply_for
+    from mock_google import dm_event, slash_event
+    s = _chat_settings(monkeypatch, tmp_path, BOARD_URL="http://whoshere.local:8085/")
+    from datetime import datetime
+    now = datetime.now(s.timezone).replace(hour=12, minute=0, second=0).timestamp()  # midday, so "today" is stable
+    _campus(db, now)
+    ask = lambda ev: reply_for(parse_event(ev), db, s, now=now)
+
+    out = ask(slash_event(1, "/whoshere", ""))
+    assert "Not clear — 1 person on campus" in out
+    assert "*Alex Rivera* — Sound Booth · Ironwood Staff" in out
+    assert "Not tracked" in out and "Jordan Lee" in out
+    assert out.endswith("<http://whoshere.local:8085|Open the board>")
+
+    out = ask(slash_event(1, "/whoshere thomas", " thomas"))
+    assert "*Thomas Bates*" in out and "*Thomas Nguyen*" in out and "Alex" not in out
+    out = ask(slash_event(1, "/whoshere alex", " alex"))
+    assert out.startswith("🟢 *Alex Rivera*")
+    assert "Nobody on the board matches “Zed”" in ask(slash_event(1, "/whoshere Zed", " Zed"))
+
+    out = ask(slash_event(2, "/allclear", ""))
+    assert "Not clear" in out and "Alex Rivera" in out and "aren't tracked: Jordan Lee" in out
+
+    out = ask(slash_event(3, "/history", ""))
+    assert "*Sam Ortiz* arrived" in out and "*Sam Ortiz* left" in out
+    assert "for Sam Ortiz" in ask(slash_event(3, "/history sam", " sam"))
+    assert "No arrivals or departures today for Alex Rivera" in ask(slash_event(3, "/history alex", " alex"))
+
+    # plain DM text
+    assert "Not clear" in ask(dm_event("all clear?"))
+    assert "*Alex Rivera*" in ask(dm_event("who's here"))
+    assert "/allclear" in ask(dm_event("help"))
+    assert "Thomas Bates" in ask(dm_event("Thomas"))
+
+
+def test_chat_all_clear_and_stale(db, monkeypatch, tmp_path):
+    from whoshere.chatbot import parse_event, reply_for
+    from mock_google import slash_event
+    s = _chat_settings(monkeypatch, tmp_path)
+    now = time.time()
+    add_person(db, "Alex Rivera", PHONE)
+    presence.apply_snapshot(db, snap({}, now - 10), GRACE)
+    out = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s, now=now)
+    assert out.startswith("🟢 *All clear to arm.*")
+    out = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s, now=now + 3600)
+    assert "Can't confirm" in out and "Walk the building" in out
+
+
+def test_chat_allowlist(db, monkeypatch, tmp_path):
+    from whoshere.chatbot import parse_event, reply_for
+    from mock_google import slash_event
+    s = _chat_settings(monkeypatch, tmp_path, GOOGLE_CHAT_ALLOWED="@ironwood.church, guest@gmail.com")
+    ok = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s)
+    assert "not on the list" not in ok
+    out = reply_for(parse_event(slash_event(2, "/allclear", "", email="someone@else.org")), db, s)
+    assert "not on the list" in out
+    assert "not on the list" not in reply_for(parse_event(slash_event(2, "/allclear", "", email="Guest@Gmail.com")), db, s)
+
+
+def test_chat_bridge_end_to_end(db, monkeypatch, tmp_path):
+    import json
+    from whoshere.gchat import ChatBridge, ChatSetupError
+    from mock_google import SUBSCRIPTION, FakeGoogle, dm_event, slash_event
+    g = FakeGoogle()
+    try:
+        s = _chat_settings(monkeypatch, tmp_path)
+        bridge = ChatBridge(s, db, pubsub_url=g.url, chat_url=g.url, token_url=g.url + "/token")
+        # no key yet
+        with pytest.raises(ChatSetupError, match="No service account key"):
+            bridge.pull_once()
+        s.chat_key_file.write_text(json.dumps(g.key))
+        bridge.reset()
+        _campus(db, time.time())
+
+        g.queue += [slash_event(1, "/whoshere", "", space_type="SPACE", space="spaces/TEAM",
+                                msg="spaces/TEAM/messages/1"),
+                    dm_event("all clear?"),
+                    dm_event("all clear?")]  # same message delivered twice
+        assert bridge.pull_once() == 3
+        assert len(g.acked) == 3
+        assert len(g.sent) == 2  # the duplicate isn't answered twice
+        team, dm = g.sent
+        assert team["space"] == "spaces/TEAM" and "Alex Rivera" in team["body"]["text"]
+        assert team["body"]["privateMessageViewer"] == {"name": "users/111"}  # shared space: private
+        assert team["body"]["thread"]["name"] == "spaces/TEAM/threads/T1"
+        assert team["query"]["messageReplyOption"] == ["REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"]
+        assert "privateMessageViewer" not in dm["body"]  # DM: normal reply
+        assert bridge.replies_sent == 2 and bridge.last_pull_ok
+
+        # If Chat won't take a private reply, answer in the space instead
+        g.reject_private = True
+        g.queue.append(slash_event(2, "/allclear", "", space_type="SPACE", space="spaces/TEAM",
+                                   msg="spaces/TEAM/messages/5"))
+        bridge.pull_once()
+        assert "privateMessageViewer" not in g.sent[-1]["body"] and "Not clear" in g.sent[-1]["body"]["text"]
+
+        # Permission problem on the subscription is explained
+        g.pull_status = 403
+        with pytest.raises(ChatSetupError, match="Pub/Sub Subscriber"):
+            bridge.pull_once()
+        g.pull_status = 200
+
+        # Bad key is explained
+        bad = dict(g.key, private_key=__import__("mock_google").make_key()[0]["private_key"])
+        s.chat_key_file.write_text(json.dumps(bad))
+        bridge.reset()
+        with pytest.raises(ChatSetupError, match="rejected the service account key"):
+            bridge.pull_once()
+    finally:
+        g.close()
+
+
+def test_chat_subscription_setting(monkeypatch, tmp_path):
+    from whoshere.config import Settings
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GOOGLE_CHAT_SUBSCRIPTION", "whoshere-chat")
+    monkeypatch.setenv("GOOGLE_CHAT_PROJECT", "ironwood-whoshere")
+    assert Settings.from_env().chat_subscription == "projects/ironwood-whoshere/subscriptions/whoshere-chat"
+    monkeypatch.delenv("GOOGLE_CHAT_PROJECT")
+    with pytest.raises(SystemExit):
+        Settings.from_env()
+    monkeypatch.setenv("GOOGLE_CHAT_SUBSCRIPTION", "")
+    assert Settings.from_env().chat_subscription == ""
