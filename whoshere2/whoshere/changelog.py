@@ -7,6 +7,13 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "3.1.0",
+        "date": "2026-11-20",
+        "changes": [
+            "Google Chat: the board link in replies is now a plain address (\"Board: http://…\"), fixing a broken link that included \"|Open the board\"",
+        ],
+    },
+    {
         "version": "3.0.0",
         "date": "2026-11-20",
         "changes": [

@@ -186,7 +186,7 @@ In a direct message with the app, plain words work too: "all clear?", a name, "h
    GOOGLE_CHAT_SUBSCRIPTION=projects/<project-id>/subscriptions/whoshere-chat
    BOARD_URL=http://<your-server>:8085
    ```
-   `BOARD_URL` is optional and adds an "Open the board" link to replies. `GOOGLE_CHAT_ALLOWED` (optional) limits who may use it, e.g. `@yourchurch.org` or a list of emails.
+   `BOARD_URL` is optional and adds a link to the board to replies. `GOOGLE_CHAT_ALLOWED` (optional) limits who may use it, e.g. `@yourchurch.org` or a list of emails.
 2. In Who's Here, **Admin → Google Chat**: upload the `.json` key from step 3, click **Test the key**, and check that the status says **Connected**.
 
 ### Step 6: Use it
