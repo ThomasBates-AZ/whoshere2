@@ -10,7 +10,7 @@
     <div class="big">Not clear — {{ b.here|length }} on campus</div>
     <ul class="who">
       {% for p in b.here %}
-        <li><strong>{{ p.name }}</strong>
+        <li><a class="person" href="/history?person={{ p.id }}&amp;days=30"><strong>{{ p.name }}</strong></a>
           {% if p.location %}<span class="chip">{{ p.location }}{% if show_wifi and p.wifi %} · {{ p.wifi }}{% endif %}</span>{% endif %}
           {% if p.leaving %}<span class="chip leaving">Here? · last seen {{ p.last_seen|ago }}</span>{% endif %}
         </li>
@@ -36,17 +36,17 @@
   <tbody>
   {% for p in b.people if p.state != 'untracked' %}
     <tr>
-      <td class="name">{{ p.name }}</td>
+      <td class="name"><a class="person" href="/history?person={{ p.id }}&amp;days=30" title="See {{ p.name }}'s history">{{ p.name }}</a></td>
       {% if p.state == 'here' %}
         <td>{% if p.leaving %}<span class="pill leaving" title="Not seen for a few minutes; counts as here until the grace period ends">Here?</span>{% else %}<span class="pill here">Here</span>{% endif %}</td>
-        <td>{{ p.location or '—' }}{% if show_wifi and p.wifi %} <span class="wifi">{{ p.wifi }}</span>{% endif %}</td>
-        <td class="muted">{% if p.leaving %}last seen {{ p.last_seen|ago }}{% elif p.since %}since {{ p.since|when }}{% else %}seen {{ p.last_seen|ago }}{% endif %}</td>
+        <td class="where">{{ p.location or '—' }}{% if show_wifi and p.wifi %} <span class="wifi">{{ p.wifi }}</span>{% endif %}</td>
+        <td class="muted when">{% if p.leaving %}last seen {{ p.last_seen|ago }}{% elif p.since %}since {{ p.since|when }}{% else %}seen {{ p.last_seen|ago }}{% endif %}</td>
       {% elif p.state == 'unknown' %}
-        <td><span class="pill unknown">Checking…</span></td><td>—</td><td class="muted">waiting for first update</td>
+        <td><span class="pill unknown">Checking…</span></td><td class="where empty">—</td><td class="muted when">waiting for first update</td>
       {% else %}
         <td><span class="pill away">Not here</span></td>
-        <td>—</td>
-        <td class="muted">{% if p.last_seen %}left {{ p.last_seen|when }}{% else %}never seen{% endif %}</td>
+        <td class="where empty">—</td>
+        <td class="muted when">{% if p.last_seen %}left {{ p.last_seen|when }}{% else %}never seen{% endif %}</td>
       {% endif %}
     </tr>
   {% else %}

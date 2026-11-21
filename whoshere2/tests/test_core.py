@@ -775,3 +775,48 @@ def test_chat_subscription_setting(monkeypatch, tmp_path):
         Settings.from_env()
     monkeypatch.setenv("GOOGLE_CHAT_SUBSCRIPTION", "")
     assert Settings.from_env().chat_subscription == ""
+
+
+def test_help_sheets_and_person_history(tmp_path, monkeypatch):
+    """Help page, both cheat sheets, and clicking a name through to that person's history."""
+    import re, threading, urllib.request
+    import uvicorn
+    from whoshere.config import Settings
+    from whoshere.web import create_app
+    for k, v in {"DATA_DIR": str(tmp_path), "UNIFI_URL": "http://127.0.0.1:9", "UNIFI_API_KEY": "k",
+                 "ADMIN_PASSWORD": "admin", "SELF_REGISTER": "true",
+                 "GOOGLE_CHAT_SUBSCRIPTION": "projects/p/subscriptions/s",
+                 "BOARD_URL": "http://solomon.example.org:8085"}.items():
+        monkeypatch.setenv(k, v)
+    app = create_app(Settings.from_env(), start_poller=False)
+    db = app.state.db
+    t0 = time.time()
+    sam = add_person(db, "Sam Ortiz", PHONE)
+    add_person(db, "Alex Rivera", "28:de:cf:88:f7:a2")
+    presence.apply_snapshot(db, snap({PHONE: AP1}, t0 - 5), GRACE)
+    db.run("INSERT INTO events (person_id, kind, at, uplink) VALUES (?, 'arrive', ?, ?)", (sam, t0 - 3600, AP1))
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.05)
+    base = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+    get = lambda p: urllib.request.urlopen(base + p).read().decode()
+    try:
+        page = get("/help")
+        assert "Reading the board" in page and "Google Chat" in page and "/register" in page
+        assert "http://solomon.example.org:8085" in page
+        board_sheet = get("/help/sheet/board")
+        assert "Quick guide" in board_sheet and "solomon.example.org:8085/register" in board_sheet
+        chat_sheet = get("/help/sheet/chat")
+        assert "/allclear" in chat_sheet and "Start a chat" in chat_sheet
+        generic = get("/help/sheet/board?generic=1")
+        assert "solomon" not in generic and 'class="blank"' in generic
+        # name on the board links to that person's history
+        board = get("/")
+        link = re.search(r'href="(/history\?person=%d&amp;days=30)"' % sam, board).group(1).replace("&amp;", "&")
+        hist = get(link)
+        assert "<h1>Sam Ortiz</h1>" in hist and "Sound Booth" in hist and "Arrived" in hist
+        assert "Alex Rivera</a>" not in hist
+        assert 'href="/history?person=%d' % sam in get("/history")
+    finally:
+        server.should_exit = True

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Help · {{ title }}{% endblock %}
+{% block content %}
+<h1>Help</h1>
+<p class="lead">Who's Here shows which staff are on campus right now. It works by noticing staff phones on the church Wi-Fi, so there's nothing to install and nothing to tap when you arrive or leave.</p>
+
+<div class="card sheets">
+  <strong>Printable cheat sheets</strong>
+  <span class="muted">One page each, good to hand out or pin up.</span>
+  <div class="inline">
+    <a class="button secondary" href="/help/sheet/board" target="_blank">Quick guide</a>
+    {% if chat_on %}<a class="button secondary" href="/help/sheet/chat" target="_blank">Google Chat guide</a>{% endif %}
+  </div>
+  <span class="note">Each opens in a new tab with a <strong>Print / Save as PDF</strong> button, and shows this board's address. Ready-made PDFs, with a blank line for the address:
+    <a href="/static/help/whoshere-quick-guide.pdf" download>quick guide</a>{% if chat_on %} · <a href="/static/help/whoshere-google-chat-guide.pdf" download>Google Chat guide</a>{% endif %}.</span>
+</div>
+
+<nav class="toc">
+  <a href="#board">Reading the board</a>
+  <a href="#arm">Before you arm the alarm</a>
+  <a href="#history">Looking back: History</a>
+  <a href="#homescreen">Put it on your phone</a>
+  <a href="#phone">Your phone</a>
+  {% if chat_on %}<a href="#chat">Google Chat</a>{% endif %}
+  <a href="#faq">Questions</a>
+  <a href="#admin">For administrators</a>
+</nav>
+
+<section id="board" class="card">
+  <h2>1. Reading the board</h2>
+  <p>Open the <a href="/">Board</a>{% if board_address %} at <strong class="mono">{{ board_address }}</strong>{% endif %} in any web browser, on a phone or a computer. It updates itself every 30 seconds.</p>
+
+  <h3>The banner at the top answers one question: is everyone gone?</h3>
+  <div class="legend">
+    <div class="verdict clear mini"><div class="big">All clear to arm</div></div>
+    <p>No tracked staff are on campus. It's safe to arm the alarm.</p>
+    <div class="verdict occupied mini"><div class="big">Not clear — 2 on campus</div></div>
+    <p>Someone is still here. Their names and where they are appear right under the heading.</p>
+    <div class="verdict stale mini"><div class="big">Can't confirm — check manually</div></div>
+    <p>The board hasn't heard from the Wi-Fi system for a few minutes, so it won't guess. Walk the building before arming.</p>
+  </div>
+
+  <h3>Each person has a status</h3>
+  <table class="list">
+    <tr><td style="width:7rem"><span class="pill here">Here</span></td><td>Their phone is on the Wi-Fi now.</td></tr>
+    <tr><td><span class="pill leaving">Here?</span></td><td>Their phone dropped off the Wi-Fi in the last {{ grace_min }} minutes. They're probably leaving, or their phone is just asleep. They still count as on campus until the {{ grace_min }} minutes are up.</td></tr>
+    <tr><td><span class="pill away">Not here</span></td><td>Gone. The board shows when they left.</td></tr>
+  </table>
+
+  <h3>Where and when</h3>
+  <ul>
+    <li><strong>Where</strong> is the area of the building whose Wi-Fi their phone is using, like <em>Sound Booth</em> or <em>Gym</em>. It's the nearest Wi-Fi point, so think "around there" rather than an exact room.{% if show_wifi %} The small grey label next to it is the Wi-Fi network they're on.{% endif %}</li>
+    <li><strong>When</strong> shows <em>since</em> (when they arrived) for people who are here, and <em>left</em> for people who aren't.</li>
+    <li><strong>Not tracked</strong> under the banner lists staff with no phone set up. The board can't see them, so it can't vouch for them.</li>
+    <li><strong>Click anyone's name</strong> to see their comings and goings (see <a href="#history">History</a>).</li>
+  </ul>
+</section>
+
+<section id="arm" class="card">
+  <h2>2. Before you arm the alarm</h2>
+  <ol class="steps">
+    <li>Open the <a href="/">Board</a>{% if chat_on %}, or type <code>/allclear</code> in Google Chat{% endif %}.</li>
+    <li><span class="dot clear"></span><strong>Green "All clear to arm"</strong>: go ahead and arm.</li>
+    <li><span class="dot occupied"></span><strong>Red "Not clear"</strong>: check the names.
+      <ul>
+        <li>People marked <span class="pill leaving">Here?</span> are probably on their way out. Wait a few minutes and look again.</li>
+        <li>People marked <span class="pill here">Here</span> are still in the building. Find them, or give them a call.</li>
+      </ul>
+    </li>
+    <li><span class="dot stale"></span><strong>Orange "Can't confirm"</strong>: walk the building as you would without the board, and let an administrator know.</li>
+    <li>Glance at <strong>Not tracked</strong>: those people won't show up on the board even if they're here.</li>
+  </ol>
+</section>
+
+<section id="history" class="card">
+  <h2>3. Looking back: History</h2>
+  <p>The <a href="/history">History</a> tab lists every arrival and departure, newest first, grouped by day.</p>
+  <ul>
+    <li><strong>Click a person's name</strong>, on the Board or in History, to see just their history for the last 30 days, along with where they are right now.</li>
+    <li>Use the first drop-down to pick one person, or leave it on <em>Everyone</em>.</li>
+    <li>Use the second to choose how far back to look: the last day, week, month, 90 days or year.</li>
+    <li><span class="pill here">Arrived</span> shows where they first connected. <span class="pill away">Left</span> shows where they were last seen.</li>
+  </ul>
+  <p class="note">A departure is recorded at the time the phone was last seen, not {{ grace_min }} minutes later when the board decides they've gone.</p>
+</section>
+
+<section id="homescreen" class="card">
+  <h2>Put the board on your phone's home screen</h2>
+  <p>It then opens like an app, full screen, with one tap.</p>
+  <div class="grid2">
+    <div>
+      <h3>iPhone (Safari)</h3>
+      <ol>
+        <li>Open the board{% if board_address %} (<span class="mono">{{ board_address }}</span>){% endif %} in <strong>Safari</strong>.</li>
+        <li>Tap the <strong>Share</strong> button (the square with an arrow pointing up).</li>
+        <li>Scroll down and tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Android (Chrome)</h3>
+      <ol>
+        <li>Open the board{% if board_address %} (<span class="mono">{{ board_address }}</span>){% endif %} in <strong>Chrome</strong>.</li>
+        <li>Tap the <strong>⋮</strong> menu at the top right.</li>
+        <li>Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>), then <strong>Add</strong>.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="phone" class="card">
+  <h2>4. Setting up your phone</h2>
+  <p>The board recognizes your phone by its Wi-Fi hardware address. Three things keep that working:</p>
+  <ol>
+    <li><strong>Connect to the staff Wi-Fi</strong>{% if staff_wifi_names %} ({% for n in staff_wifi_names %}<strong>{{ n }}</strong>{% if not loop.last %} or {% endif %}{% endfor %}){% endif %} and leave Wi-Fi turned on while you're at church.</li>
+    <li><strong>Turn off "Private Wi-Fi Address"</strong> for {{ 'each staff network' if staff_wifi_names|length > 1 else 'the staff network' }}. Phones hide their real address by default, and a hidden address keeps changing, so the board loses track of you.
+      <details><summary>Show me how</summary>{% with wifi_here=None %}{% include "_private_wifi_help.html" %}{% endwith %}</details>
+    </li>
+    <li><strong>Get your phone added to the board.</strong>
+      {% if register_on %}Open <a href="/register">Add my phone</a>{% if board_address %} (<span class="mono">{{ board_address }}/register</span>){% endif %} <em>on your phone, while it's on the staff Wi-Fi</em>, type your name, and tap <strong>Add my phone</strong>. If you get a new phone, do the same again with the same name.
+      {% else %}Ask an administrator. They'll pick your phone from a list.{% endif %}
+    </li>
+  </ol>
+</section>
+
+{% if chat_on %}
+<section id="chat" class="card">
+  <h2>5. Google Chat</h2>
+  <p>You can ask Who's Here from Google Chat, on your computer or in the Gmail or Google Chat app on your phone.</p>
+  <h3>Start a chat with it (once)</h3>
+  <ol>
+    <li>Open <strong>Google Chat</strong>: <span class="mono">chat.google.com</span>, the Chat section of Gmail, or the Google Chat app.</li>
+    <li>Click <strong>New chat</strong>, type <strong>Who's Here</strong>, and choose the app with the maroon person icon.</li>
+    <li>Click <strong>Start chat</strong>. From then on it's in your list of chats.</li>
+  </ol>
+  <h3>Then type one of these</h3>
+  <table class="list">
+    <tr><td class="mono" style="width:11rem">/whoshere</td><td>Who's on campus and where.</td></tr>
+    <tr><td class="mono">/whoshere Thomas</td><td>Look someone up by name: where they are, or when they were last here.</td></tr>
+    <tr><td class="mono">/allclear</td><td>Is it safe to arm the alarm?</td></tr>
+    <tr><td class="mono">/history</td><td>Today's arrivals and departures. Add a name for one person.</td></tr>
+  </table>
+  <p class="note">In a chat with Who's Here you can also just type plain words: <em>all clear?</em>, a name, or <em>help</em>. If you use it in a team space, only you see its answers.</p>
+</section>
+{% endif %}
+
+<section id="faq" class="card">
+  <h2>Questions</h2>
+  <dl class="faq">
+    <dt>I'm at church but the board says I'm not here.</dt>
+    <dd>Check that Wi-Fi is on and you're connected to the staff network, not the guest one or cellular only. If you are, Private Wi-Fi Address may have been turned back on, which can happen after a phone update. Turn it off again (see <a href="#phone">Your phone</a>).</dd>
+    <dt>I left an hour ago and I'm still showing as here.</dt>
+    <dd>Another device of yours may still be on the Wi-Fi, such as a laptop or tablet left in the building. Or someone else's phone may have been added under your name. Let an administrator know.</dd>
+    <dt>Why does it say "Here?" with a question mark?</dt>
+    <dd>Phones drop off Wi-Fi when they go to sleep. The board waits {{ grace_min }} minutes before deciding you've left, and shows "Here?" while it waits.</dd>
+    <dt>Is it tracking me everywhere?</dt>
+    <dd>No. It only knows which church Wi-Fi point your phone is connected to while you're on the church network. It can't see anything when you're away, and it never sees what you do on your phone.</dd>
+    <dt>The banner says "Can't confirm".</dt>
+    <dd>The board couldn't reach the Wi-Fi system for a few minutes. Treat the board as unknown and check the building yourself. An administrator can see the reason on the Status page.</dd>
+  </dl>
+</section>
+
+<section id="admin" class="card">
+  <h2>For administrators</h2>
+  <p>Sign in with <strong>Admin</strong> at the top right. Then:</p>
+  <ul>
+    <li><strong>People</strong>: add, rename or hide staff. Hidden people disappear from the board.</li>
+    <li><strong>Devices</strong>: every phone the Wi-Fi has seen. Pick a person and click <strong>Assign</strong>. Phones whose name matches a person are suggested.</li>
+    <li><strong>Locations</strong>: give Wi-Fi points friendlier names for the board.</li>
+    <li><strong>Status</strong>: whether the board is getting data, and why not if it isn't.</li>
+    <li><strong>Backup</strong>: export or import everything, for moving to a new server.</li>
+    <li><strong>Google Chat</strong>: connection status and the service account key.</li>
+  </ul>
+  <p class="note">Installation and setup are in the project's README on GitHub. See <a href="/revisions">Revision history</a> for what changed in each version.</p>
+</section>
+{% endblock %}
