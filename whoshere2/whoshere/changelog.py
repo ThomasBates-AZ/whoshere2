@@ -7,6 +7,17 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "3.2.0",
+        "date": "2026-11-21",
+        "changes": [
+            "New Help tab: a plain-language guide to reading the board, checking before you arm, History, setting up your phone, and Google Chat",
+            "Printable one-page cheat sheets (quick guide and Google Chat guide) with your board's address, with a Print / Save as PDF button",
+            "Click a person's name on the Board or in History to see their arrivals and departures, with where they are right now",
+            "Better on iPhone and Android: the board and History show one card per person, and the menu is a single swipeable row",
+            "Add the board to your phone's home screen to open it like an app; Help explains how on iPhone and Android",
+        ],
+    },
+    {
         "version": "3.1.0",
         "date": "2026-11-20",
         "changes": [

@@ -113,6 +113,19 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
             "last_error": state["last_error"],
         })
 
+    async def manifest(request: Request):
+        """Lets phones add the board to the home screen as an app."""
+        return JSONResponse({
+            "name": settings.title, "short_name": "Who's Here", "start_url": "/", "scope": "/",
+            "display": "standalone", "background_color": "#f6f5f3", "theme_color": "#6b0f1a",
+            "icons": [
+                {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+                {"src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png",
+                 "purpose": "maskable"},
+            ],
+        }, media_type="application/manifest+json")
+
     async def healthz(request: Request):
         return PlainTextResponse("ok")
 
@@ -143,7 +156,15 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
             grouped[-1][1].append({**dict(e), "location": names.get(e["uplink"]) if e["uplink"] else None,
                                        "wifi": e["ssid"]})
         people = db.all("SELECT id, name FROM people ORDER BY name COLLATE NOCASE")
-        return render(request, "history.html", grouped=grouped, people=people,
+        selected = None
+        if person.isdigit():
+            board_people = presence.board(db, settings.stale_after)["people"]
+            selected = next((p for p in board_people if p["id"] == int(person)), None)
+            if selected is None:  # hidden from the board: still show their name
+                row = db.one("SELECT id, name FROM people WHERE id = ?", (int(person),))
+                if row:
+                    selected = {"id": row["id"], "name": row["name"], "state": "hidden"}
+        return render(request, "history.html", grouped=grouped, people=people, selected=selected,
                       days=days, person=person, truncated=len(events) >= 2000)
 
     # ----- self-registration: staff add their own phone
@@ -592,6 +613,36 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         return render(request, "chat.html", chat=chat, key_email=key_email, key_error=key_error,
                       commands=sorted(chatbot.COMMANDS.items()), s=settings)
 
+    # ----- help and cheat sheets
+
+    def help_context(request: Request) -> dict:
+        generic = request.query_params.get("generic") == "1"
+        address = "" if generic else (settings.board_url or str(request.base_url).rstrip("/"))
+        return dict(
+            board_address=address,
+            generic=generic,
+            chat_on=bool(settings.chat_subscription) or generic,
+            register_on=settings.self_register or generic,
+            grace_min=settings.departure_grace // 60,
+            stale_min=max(1, settings.stale_after // 60),
+            staff_wifi_names=list(settings.wifi_networks),
+            commands=sorted(chatbot.COMMANDS.items()),
+        )
+
+    async def help_page(request: Request):
+        if not can_view(request):
+            return to_login(request)
+        return render(request, "help.html", **help_context(request))
+
+    async def cheat_sheet(request: Request):
+        if not can_view(request):
+            return to_login(request)
+        sheet = request.path_params["sheet"]
+        if sheet not in ("board", "chat"):
+            return back("/help")
+        return templates.TemplateResponse(request, "sheet.html", {
+            **help_context(request), "sheet": sheet, "title": settings.title, "version": __version__})
+
     async def revisions_page(request: Request):
         if not can_view(request):
             return to_login(request)
@@ -617,6 +668,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         Route("/history", history_page),
         Route("/api/status", api_status),
         Route("/healthz", healthz),
+        Route("/manifest.webmanifest", manifest),
         Route("/register", register_page, methods=["GET", "POST"]),
         Route("/login", login, methods=["GET", "POST"]),
         Route("/logout", logout),
@@ -629,6 +681,8 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         Route("/admin/backup", backup_page, methods=["GET", "POST"]),
         Route("/admin/export", export_download),
         Route("/revisions", revisions_page),
+        Route("/help", help_page),
+        Route("/help/sheet/{sheet}", cheat_sheet),
         Route("/admin/chat", chat_page, methods=["GET", "POST"]),
         Mount("/static", StaticFiles(directory=str(HERE / "static")), name="static"),
     ]

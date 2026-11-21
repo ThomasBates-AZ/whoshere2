@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if sheet == 'chat' %}Who's Here in Google Chat{% else %}Who's Here quick guide{% endif %}</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  @page { size: letter; margin: 0.4in 0.5in; }
+  body { background: #fff; font-size: 13.2px; line-height: 1.36; }
+  .toolbar { background: var(--brand); color: #fff; padding: .6rem 1rem; display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
+  .toolbar button { background: #fff; color: var(--brand); }
+  .page { max-width: 7.4in; margin: 1rem auto; }
+  .head { display: flex; align-items: center; gap: .8rem; border-bottom: 3px solid var(--brand); padding-bottom: .5rem; margin-bottom: .7rem; }
+  .head img { width: 58px; height: 58px; align-self: flex-start; margin-top: .2rem; }
+  .head h1 { margin: 0; font-size: 1.65rem; color: var(--brand); }
+  .head .sub { color: var(--muted); font-size: .95rem; }
+  .addr { margin-top: .2rem; font-size: .95rem; color: var(--ink); }
+  .addr strong { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f3e6e8; border-radius: 5px; padding: .05rem .4rem; }
+  h2 { font-size: 1.05rem; color: var(--brand); margin: .6rem 0 .3rem; border-bottom: 1px solid var(--line); padding-bottom: .15rem; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.4rem; }
+  .box { break-inside: avoid; }
+  ul, ol { margin: .2rem 0 .3rem; padding-left: 1.2rem; }
+  li { margin: .18rem 0; }
+  .vrow { display: grid; grid-template-columns: 2.3in 1fr; gap: .4rem .7rem; align-items: center; margin: .25rem 0; }
+  .verdict.mini { padding: .35rem .6rem; margin: 0; border-width: 2px; }
+  .verdict.mini .big { font-size: .95rem; }
+  table.cmds { width: 100%; border-collapse: collapse; box-shadow: none; }
+  table.cmds td { border-bottom: 1px solid var(--line); padding: .35rem .4rem; vertical-align: top; }
+  table.cmds td.c { font-family: ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; font-weight: 700; width: 1%; }
+  .reply { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; background: #f6f5f3; border-left: 3px solid var(--brand); padding: .35rem .6rem; white-space: pre-wrap; margin: .3rem 0; }
+  .tip { background: var(--blue-bg); border-radius: 8px; padding: .45rem .7rem; margin-top: .5rem; }
+  .foot { margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .35rem; color: var(--muted); font-size: .78rem; display: flex; justify-content: space-between; }
+  .blank { display: inline-block; min-width: 2.6in; border-bottom: 1px solid #999; }
+  @media print {
+    .toolbar { display: none; }
+    .page { margin: 0; max-width: none; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span>Cheat sheet: one printed page.</span>
+  <span><button onclick="window.print()">Print / Save as PDF</button> <a href="/help" style="color:#fff">Back to Help</a></span>
+</div>
+
+<div class="page">
+  <div class="head">
+    <img src="/static/favicon.svg" alt="">
+    <div>
+      <h1>{% if sheet == 'chat' %}Who's Here in Google Chat{% else %}Who's Here? Quick guide{% endif %}</h1>
+      <div class="sub">{% if sheet == 'chat' %}Ask who's on campus without opening the board.{% else %}See who's on campus, and know when it's safe to arm the alarm.{% endif %}</div>
+      <div class="addr">Open the board at {% if board_address %}<strong>{{ board_address }}</strong>{% else %}<span class="blank">&nbsp;</span>{% endif %}</div>
+    </div>
+  </div>
+
+{% if sheet == 'board' %}
+  <p style="margin:.2rem 0 .4rem">Who's Here notices staff phones on the church Wi-Fi. <strong>There's nothing to install and nothing to tap</strong> when you come or go. Open the board in any web browser, on your phone or a computer.</p>
+
+  <h2>The banner: is everyone gone?</h2>
+  <div class="vrow"><div class="verdict clear mini"><div class="big">All clear to arm</div></div><div>No tracked staff on campus. <strong>Safe to arm.</strong></div></div>
+  <div class="vrow"><div class="verdict occupied mini"><div class="big">Not clear — 2 on campus</div></div><div>Someone's still here. Their names and locations are listed under it.</div></div>
+  <div class="vrow"><div class="verdict stale mini"><div class="big">Can't confirm</div></div><div>The board has lost touch with the Wi-Fi. <strong>Walk the building</strong> before arming.</div></div>
+
+  <div class="cols">
+    <div class="box">
+      <h2>Each person's status</h2>
+      <ul style="list-style:none;padding-left:0">
+        <li><span class="pill here">Here</span> phone is on the Wi-Fi now</li>
+        <li><span class="pill leaving">Here?</span> not seen for a few minutes: probably leaving, or the phone is asleep. Still counts as here for {{ grace_min }} minutes.</li>
+        <li><span class="pill away">Not here</span> gone; shows when they left</li>
+      </ul>
+      <p style="margin:.2rem 0"><strong>Where</strong> is the nearest Wi-Fi point, like <em>Gym</em> or <em>Sound Booth</em>. <strong>Not tracked</strong> lists staff with no phone set up; the board can't see them.</p>
+    </div>
+    <div class="box">
+      <h2>Before you arm the alarm</h2>
+      <ol>
+        <li>Open the board{% if chat_on %}, or type <strong>/allclear</strong> in Google Chat{% endif %}.</li>
+        <li><strong>Green:</strong> arm it.</li>
+        <li><strong>Red:</strong> people marked <em>Here?</em> are likely on their way out, so check again in a few minutes. Anyone marked <em>Here</em> is still inside.</li>
+        <li><strong>Orange:</strong> walk the building.</li>
+        <li>Check the <strong>Not tracked</strong> names too.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="box">
+      <h2>Set up your phone (once)</h2>
+      <ol>
+        <li>Connect to the <strong>staff Wi-Fi</strong>{% if staff_wifi_names %} ({{ staff_wifi_names|join(' or ') }}){% endif %} and leave Wi-Fi on at church.</li>
+        <li>Turn off <strong>Private Wi-Fi Address</strong> for that network:
+          <ul>
+            <li><strong>iPhone:</strong> Settings → Wi-Fi → ⓘ next to the network → Private Wi-Fi Address → <em>Off</em>.</li>
+            <li><strong>Android:</strong> Settings → Wi-Fi → ⚙ next to the network → Privacy → <em>Use device MAC</em> (Samsung: View more → MAC address type → <em>Phone MAC</em>).</li>
+          </ul>
+        </li>
+        {% if register_on %}<li>On that phone, open <strong>{% if board_address %}{{ board_address }}/register{% else %}the board's <em>Add my phone</em> page{% endif %}</strong>, type your name, and tap <strong>Add my phone</strong>.</li>
+        {% else %}<li>Ask an administrator to add your phone to the board.</li>{% endif %}
+      </ol>
+    </div>
+    <div class="box">
+      <h2>Looking back: History</h2>
+      <p style="margin:.2rem 0"><strong>Click anyone's name</strong> on the board to see their arrivals and departures. The <strong>History</strong> tab shows everyone; pick a person and a time range (day, week, month…) from the drop-downs. Departures show the time the phone was last seen.</p>
+      <h2>Something looks wrong?</h2>
+      <ul>
+        <li><strong>Here but shown as not here:</strong> check Wi-Fi is on, you're on the staff network, and Private Wi-Fi Address is still off. Phone updates can switch it back on.</li>
+        <li><strong>Left but still shown as here:</strong> a laptop or tablet of yours may still be on the Wi-Fi. Tell an administrator.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tip" style="background:#f3e6e8"><strong>Put it on your home screen:</strong> iPhone: open the board in Safari → <strong>Share</strong> → <strong>Add to Home Screen</strong>. Android: open it in Chrome → <strong>⋮</strong> → <strong>Add to Home screen</strong>.</div>
+  {% if chat_on %}<div class="tip"><strong>Google Chat:</strong> start a chat with the <strong>Who's Here</strong> app and type <strong>/whoshere</strong> to see who's on campus, or <strong>/allclear</strong> before you arm. See the Google Chat cheat sheet.</div>{% endif %}
+
+{% else %}
+  <h2>Start a chat with Who's Here (one time)</h2>
+  <div class="cols">
+    <ol class="box">
+      <li>Open <strong>Google Chat</strong>: <strong>chat.google.com</strong>, the Chat section of Gmail, or the Google Chat app on your phone.</li>
+      <li>Click <strong>New chat</strong>, then type <strong>Who's Here</strong>.</li>
+      <li>Pick the app with the <strong>maroon person icon</strong> <img src="/static/favicon.svg" alt="" style="width:16px;height:16px;vertical-align:-3px">, then click <strong>Start chat</strong>.</li>
+    </ol>
+    <div class="box">
+      <p style="margin:.2rem 0">It now sits in your chat list like any conversation. Open it whenever you want to ask.</p>
+      <p style="margin:.4rem 0 .2rem"><strong>Using it in a team space?</strong> Click the space's name → <strong>Apps &amp; integrations</strong> → <strong>Add apps</strong> → <strong>Who's Here</strong>. Only the person who asks sees the answer.</p>
+    </div>
+  </div>
+
+  <h2>Type a command</h2>
+  <table class="cmds">
+    <tr><td class="c">/whoshere</td><td>Who's on campus, and where.</td></tr>
+    <tr><td class="c">/whoshere Thomas</td><td>Look someone up by name: where they are, or when they were last here. Part of a name works.</td></tr>
+    <tr><td class="c">/allclear</td><td><strong>Is it safe to arm the alarm?</strong> Answers all clear, who's still here, or "can't confirm".</td></tr>
+    <tr><td class="c">/history</td><td>Today's arrivals and departures. Add a name for one person: <strong>/history Sam</strong></td></tr>
+  </table>
+  <p style="margin:.35rem 0 0">Type <strong>/</strong> in the message box to see the list. In your chat with Who's Here you can also type plain words: <em>all clear?</em>, a name, or <em>help</em>.</p>
+
+  <h2>What the answers look like</h2>
+  <div class="cols">
+    <div class="box">
+      <div class="reply">/allclear
+🟢 All clear to arm. No tracked staff are on campus.</div>
+      <div class="reply">/allclear
+🔴 Not clear — 2 people on campus.
+• Sam Ortiz — Gym (since 6:05 PM)
+• Alex Rivera — Sound Booth (Here? last seen 4 min ago)</div>
+    </div>
+    <div class="box">
+      <ul style="margin-top:0">
+        <li>🟢 <strong>All clear</strong>: safe to arm.</li>
+        <li>🔴 <strong>Not clear</strong>: these people are still here. <em>Here?</em> means probably leaving, so ask again in a few minutes.</li>
+        <li>🟠 <strong>Can't confirm</strong>: the board has lost touch with the Wi-Fi. Walk the building before arming.</li>
+        <li><em>Not tracked</em>: staff with no phone set up; the board can't see them.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tip"><strong>Not finding the app, or it says you're not on the list?</strong> Ask an administrator to give you access to Who's Here in Google Chat.</div>
+{% endif %}
+
+  <div class="foot"><span>Who's Here? {{ version }}</span><span>{% if board_address %}{{ board_address }}/help{% else %}Full help: the Help tab on the board{% endif %}</span></div>
+</div>
+</body>
+</html>

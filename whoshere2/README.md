@@ -88,6 +88,17 @@ Set `SELF_REGISTER=true` and staff can open `http://<server>:8085/register` **on
 
 A QR code for `/register` on the staff-room wall works well.
 
+## Help for staff
+
+The **Help** tab is a plain-language guide for everyone. It covers reading the board, checking before you arm the alarm, History (click any name to see that person's history), setting up a phone, putting the board on a phone's home screen, and Google Chat.
+
+Two one-page cheat sheets are linked from Help: a **Quick guide** and a **Google Chat guide**. They open with this board's own address filled in, and have a **Print / Save as PDF** button. Ready-made PDFs with a blank address line ship in `whoshere/static/help/`. To regenerate them, or to make copies with your address printed on them:
+
+```sh
+pip install playwright && playwright install chromium
+python tools/make_cheatsheets.py --out ~/Desktop --board-url http://whoshere.example.org:8085 --self-register
+```
+
 ## Moving to a new server
 
 1. On the old server, open **Backup** (admin), tick **Include arrival & departure history** if you want it, and click **Download export**. The file holds people, their devices, custom location names and hidden devices.

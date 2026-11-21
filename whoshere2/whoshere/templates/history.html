@@ -1,7 +1,19 @@
 {% extends "base.html" %}
 {% block title %}History · {{ title }}{% endblock %}
 {% block content %}
+{% if selected %}
+  <p class="note"><a href="/history?days={{ days }}">← Everyone</a></p>
+  <h1>{{ selected.name }}</h1>
+  <p class="person-now">
+    {% if selected.state == 'here' %}<span class="pill {{ 'leaving' if selected.leaving else 'here' }}">{{ 'Here?' if selected.leaving else 'Here' }}</span> {{ selected.location or '' }}{% if selected.since %} · since {{ selected.since|when }}{% endif %}
+    {% elif selected.state == 'away' %}<span class="pill away">Not here</span> {% if selected.last_seen %}last seen {{ selected.last_seen|when }}{% endif %}
+    {% elif selected.state == 'untracked' %}<span class="pill away">Not tracked</span> no phone set up
+    {% else %}<span class="pill unknown">Checking…</span>{% endif %}
+  </p>
+{% else %}
 <h1>Arrivals &amp; departures</h1>
+<p class="note">Click a name to see just that person.</p>
+{% endif %}
 <form class="filters" method="get">
   <select name="person" onchange="this.form.submit()">
     <option value="">Everyone</option>
@@ -17,11 +29,11 @@
 
 {% for label, events in grouped %}
   <h2 class="day">{{ label }}</h2>
-  <table class="list">
+  <table class="list events">
     {% for e in events %}
     <tr>
       <td class="time">{{ e.at|clock }}</td>
-      <td class="name">{{ e.name }}</td>
+      <td class="name">{% if person %}{{ e.name }}{% else %}<a class="person" href="/history?person={{ e.person_id }}&amp;days={{ days }}">{{ e.name }}</a>{% endif %}</td>
       {% if e.kind == 'arrive' %}
         <td><span class="pill here">Arrived</span></td><td>{{ e.location or '' }}{% if show_wifi and e.wifi %} <span class="wifi">{{ e.wifi }}</span>{% endif %}</td>
       {% else %}

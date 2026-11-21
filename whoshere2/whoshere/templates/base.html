@@ -7,6 +7,12 @@
   <title>{% block title %}{{ title }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#6b0f1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Who's Here">
 </head>
 <body>
 <header class="top">
@@ -23,6 +29,7 @@
       <a href="/admin/backup" {% if path.startswith('/admin/backup') %}class="on"{% endif %}>Backup</a>
       <a href="/admin/chat" {% if path.startswith('/admin/chat') %}class="on"{% endif %}>Google Chat</a>
     {% endif %}
+    <a href="/help" {% if path.startswith('/help') %}class="on"{% endif %}>Help</a>
     {% if role %}<a href="/logout" class="quiet">Sign out</a>
     {% elif admin_enabled %}<a href="/login?next=/admin/people" class="quiet">Admin</a>{% endif %}
   </nav>
