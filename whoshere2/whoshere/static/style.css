@@ -202,3 +202,17 @@ a.person:hover { color: var(--brand); border-bottom-color: var(--brand); }
   table.list td, table.list th { padding: .55rem .5rem; }
   footer { padding: 1rem .75rem 1.5rem; }
 }
+
+/* refresh */
+a.refresh-now { white-space: nowrap; }
+.ptr { position: fixed; top: 0; left: 50%; z-index: 50; margin-left: -6.5rem; width: 13rem;
+       transform: translateY(-60px); opacity: 0; pointer-events: none;
+       display: flex; align-items: center; justify-content: center; gap: .45rem;
+       background: var(--card); color: var(--ink); border-radius: 999px; padding: .45rem .9rem;
+       box-shadow: 0 2px 10px rgba(0,0,0,.18); font-size: .9rem; font-weight: 600; }
+.ptr-arrow { display: inline-block; transition: transform .15s; color: var(--brand); font-size: 1.05rem; }
+.ptr.ready .ptr-arrow { transform: rotate(180deg); }
+.ptr.spinning .ptr-arrow { animation: ptr-spin .8s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+html.ptr-on, html.ptr-on body { overscroll-behavior-y: contain; }
+body.ptr-refreshing main { opacity: .55; transition: opacity .15s; }
