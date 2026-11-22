@@ -820,3 +820,26 @@ def test_help_sheets_and_person_history(tmp_path, monkeypatch):
         assert 'href="/history?person=%d' % sam in get("/history")
     finally:
         server.should_exit = True
+
+
+def test_refresh_script_on_live_pages(tmp_path, monkeypatch):
+    import threading, urllib.request
+    import uvicorn
+    from whoshere.config import Settings
+    from whoshere.web import create_app
+    for k, v in {"DATA_DIR": str(tmp_path), "UNIFI_URL": "http://127.0.0.1:9", "UNIFI_API_KEY": "k"}.items():
+        monkeypatch.setenv(k, v)
+    app = create_app(Settings.from_env(), start_poller=False)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.05)
+    base = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+    get = lambda p: urllib.request.urlopen(base + p).read().decode()
+    try:
+        board, history, help_ = get("/"), get("/history"), get("/help")
+        assert "<body data-live>" in board and "<body data-live>" in history and "<body data-live>" not in help_
+        assert "refresh.js" in board and "data-refresh-now" in board
+        assert "enablePullToRefresh" in get("/static/refresh.js")
+    finally:
+        server.should_exit = True

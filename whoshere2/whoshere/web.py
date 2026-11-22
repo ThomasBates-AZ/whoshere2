@@ -96,7 +96,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         if not can_view(request):
             return to_login(request)
         state = presence.board(db, settings.stale_after)
-        return render(request, "board.html", b=state, refresh=30)
+        return render(request, "board.html", b=state, refresh=30, live=True)
 
     async def api_status(request: Request):
         if not can_view(request):
@@ -164,7 +164,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
                 row = db.one("SELECT id, name FROM people WHERE id = ?", (int(person),))
                 if row:
                     selected = {"id": row["id"], "name": row["name"], "state": "hidden"}
-        return render(request, "history.html", grouped=grouped, people=people, selected=selected,
+        return render(request, "history.html", live=True, grouped=grouped, people=people, selected=selected,
                       days=days, person=person, truncated=len(events) >= 2000)
 
     # ----- self-registration: staff add their own phone

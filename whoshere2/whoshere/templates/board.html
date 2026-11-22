@@ -54,5 +54,5 @@
   {% endfor %}
   </tbody>
 </table>
-<p class="updated">Updated {{ b.generated_at|clock }}{% if b.last_success %} · UniFi data from {{ b.last_success|ago }}{% endif %} · refreshes every 30 seconds</p>
+<p class="updated">Updated {{ b.generated_at|clock }}{% if b.last_success %} · UniFi data from {{ b.last_success|ago }}{% endif %} · refreshes every 30 seconds · <a href="/" data-refresh-now class="refresh-now">↻ Refresh now</a></p>
 {% endblock %}

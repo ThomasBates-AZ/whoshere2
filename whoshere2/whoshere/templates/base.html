@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% if refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif %}
   <title>{% block title %}{{ title }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{ version }}">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -14,7 +14,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Who's Here">
 </head>
-<body>
+<body{% if live %} data-live{% endif %}>
 <header class="top">
   <a class="brand" href="/">{{ title }}</a>
   <nav>
@@ -39,5 +39,6 @@
   {% block content %}{% endblock %}
 </main>
 <footer>Who's Here? {{ version }} · By Thomas Bates · GPL-3.0 · <a href="/revisions">Revision history</a></footer>
+<script src="/static/refresh.js?v={{ version }}" defer></script>
 </body>
 </html>

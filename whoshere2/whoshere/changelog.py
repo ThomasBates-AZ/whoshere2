@@ -7,6 +7,15 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "3.3.0",
+        "date": "2026-11-22",
+        "changes": [
+            "Pull down to refresh when the board is opened from a phone's home screen",
+            "\"↻ Refresh now\" at the bottom of the board",
+            "The Board and History refresh themselves when you switch back to them after 30 seconds or more",
+        ],
+    },
+    {
         "version": "3.2.0",
         "date": "2026-11-21",
         "changes": [
