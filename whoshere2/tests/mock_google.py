@@ -36,6 +36,7 @@ class FakeGoogle:
         self.acked: list[str] = []
         self.sent: list[dict] = []         # {"space", "query", "body"}
         self.reject_private = False
+        self.reject_cards = False
         self.pull_status = 200
         self.lock = threading.Lock()
         fake = self
@@ -84,6 +85,8 @@ class FakeGoogle:
                         fake.acked += body.get("ackIds", [])
                     return self._send(200, {})
                 if url.path.startswith("/v1/spaces/") and url.path.endswith("/messages"):
+                    if fake.reject_cards and "cardsV2" in body:
+                        return self._send(400, {"error": {"code": 400, "message": "Invalid card."}})
                     if fake.reject_private and "privateMessageViewer" in body:
                         return self._send(400, {"error": {"code": 400, "message": "Private messages aren't supported here."}})
                     with fake.lock:
