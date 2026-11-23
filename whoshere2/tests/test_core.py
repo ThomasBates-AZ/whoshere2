@@ -657,7 +657,7 @@ def test_chat_replies(db, monkeypatch, tmp_path):
     from datetime import datetime
     now = datetime.now(s.timezone).replace(hour=12, minute=0, second=0).timestamp()  # midday, so "today" is stable
     _campus(db, now)
-    ask = lambda ev: reply_for(parse_event(ev), db, s, now=now)
+    ask = lambda ev: reply_for(parse_event(ev), db, s, now=now).text
 
     out = ask(slash_event(1, "/whoshere", ""))
     assert "Not clear — 1 person on campus" in out
@@ -673,7 +673,7 @@ def test_chat_replies(db, monkeypatch, tmp_path):
     assert "Nobody on the board matches “Zed”" in ask(slash_event(1, "/whoshere Zed", " Zed"))
 
     out = ask(slash_event(2, "/allclear", ""))
-    assert "Not clear" in out and "Alex Rivera" in out and "aren't tracked: Jordan Lee" in out
+    assert "Not clear" in out and "Alex Rivera" in out and "Not tracked:_ Jordan Lee" in out
 
     out = ask(slash_event(3, "/history", ""))
     assert "*Sam Ortiz* arrived" in out and "*Sam Ortiz* left" in out
@@ -694,9 +694,9 @@ def test_chat_all_clear_and_stale(db, monkeypatch, tmp_path):
     now = time.time()
     add_person(db, "Alex Rivera", PHONE)
     presence.apply_snapshot(db, snap({}, now - 10), GRACE)
-    out = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s, now=now)
-    assert out.startswith("🟢 *All clear to arm.*")
-    out = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s, now=now + 3600)
+    out = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s, now=now).text
+    assert out.startswith("🟢 *All clear to arm*")
+    out = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s, now=now + 3600).text
     assert "Can't confirm" in out and "Walk the building" in out
 
 
@@ -704,11 +704,11 @@ def test_chat_allowlist(db, monkeypatch, tmp_path):
     from whoshere.chatbot import parse_event, reply_for
     from mock_google import slash_event
     s = _chat_settings(monkeypatch, tmp_path, GOOGLE_CHAT_ALLOWED="@ironwood.church, guest@gmail.com")
-    ok = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s)
+    ok = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s).text
     assert "not on the list" not in ok
-    out = reply_for(parse_event(slash_event(2, "/allclear", "", email="someone@else.org")), db, s)
+    out = reply_for(parse_event(slash_event(2, "/allclear", "", email="someone@else.org")), db, s).text
     assert "not on the list" in out
-    assert "not on the list" not in reply_for(parse_event(slash_event(2, "/allclear", "", email="Guest@Gmail.com")), db, s)
+    assert "not on the list" not in reply_for(parse_event(slash_event(2, "/allclear", "", email="Guest@Gmail.com")), db, s).text
 
 
 def test_chat_bridge_end_to_end(db, monkeypatch, tmp_path):
@@ -734,7 +734,10 @@ def test_chat_bridge_end_to_end(db, monkeypatch, tmp_path):
         assert len(g.acked) == 3
         assert len(g.sent) == 2  # the duplicate isn't answered twice
         team, dm = g.sent
-        assert team["space"] == "spaces/TEAM" and "Alex Rivera" in team["body"]["text"]
+        card = team["body"]["cardsV2"][0]["card"]
+        assert team["space"] == "spaces/TEAM" and "Alex Rivera" in team["body"]["fallbackText"]
+        rows = [w["decoratedText"] for sec in card["sections"] for w in sec["widgets"] if "decoratedText" in w]
+        assert any("Alex Rivera" in r["text"] and r.get("topLabel", "").startswith("Sound Booth") for r in rows)
         assert team["body"]["privateMessageViewer"] == {"name": "users/111"}  # shared space: private
         assert team["body"]["thread"]["name"] == "spaces/TEAM/threads/T1"
         assert team["query"]["messageReplyOption"] == ["REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"]
@@ -746,7 +749,16 @@ def test_chat_bridge_end_to_end(db, monkeypatch, tmp_path):
         g.queue.append(slash_event(2, "/allclear", "", space_type="SPACE", space="spaces/TEAM",
                                    msg="spaces/TEAM/messages/5"))
         bridge.pull_once()
-        assert "privateMessageViewer" not in g.sent[-1]["body"] and "Not clear" in g.sent[-1]["body"]["text"]
+        last = g.sent[-1]["body"]
+        assert "privateMessageViewer" not in last and "Not clear" in json.dumps(last["cardsV2"])
+
+        # If Chat won't take a card, plain text goes instead, each person on their own line
+        g.reject_private = False
+        g.reject_cards = True
+        g.queue.append(slash_event(1, "/whoshere", "", msg="spaces/AAA/messages/77"))
+        bridge.pull_once()
+        assert "cardsV2" not in g.sent[-1]["body"] and "\n• *Alex Rivera*" in g.sent[-1]["body"]["text"]
+        g.reject_cards = False
 
         # Permission problem on the subscription is explained
         g.pull_status = 403
@@ -843,3 +855,37 @@ def test_refresh_script_on_live_pages(tmp_path, monkeypatch):
         assert "enablePullToRefresh" in get("/static/refresh.js")
     finally:
         server.should_exit = True
+
+
+
+def test_chat_cards_one_row_per_person(db, monkeypatch, tmp_path):
+    from whoshere.chatbot import parse_event, reply_for
+    from mock_google import slash_event
+    s = _chat_settings(monkeypatch, tmp_path, BOARD_URL="http://whoshere.example.org")
+    now = time.time()
+    add_person(db, "Bobby <Watkins>", PHONE)
+    add_person(db, "Jeremy Rabideau", "28:de:cf:88:f7:a2")
+    add_person(db, "Thomas Bates", "f4:0f:24:11:22:33")
+    snap1 = snap({}, now - 30)
+    snap1.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Ironwood Band"),
+                     ClientInfo(mac="28:de:cf:88:f7:a2", name="p", uplink_mac=AP2, ssid="Ironwood Staff"),
+                     ClientInfo(mac="f4:0f:24:11:22:33", name="p", uplink_mac=AP1, ssid="Ironwood Staff")]
+    presence.apply_snapshot(db, snap1, GRACE)
+    for cid, cmd in ((1, "/whoshere"), (2, "/allclear")):
+        r = reply_for(parse_event(slash_event(cid, cmd, "")), db, s, now=now)
+        card = r.card["card"]
+        assert card["header"]["title"] == "Who's Here"
+        assert "Not clear — 3 people on campus" in card["sections"][0]["widgets"][0]["textParagraph"]["text"]
+        rows = [w["decoratedText"] for sec in card["sections"] for w in sec["widgets"] if "decoratedText" in w]
+        assert len(rows) == 3  # one row each
+        assert rows[0]["text"] == "<b>Bobby &lt;Watkins&gt;</b>"  # names are escaped
+        assert rows[0]["topLabel"] == "Sound Booth · Ironwood Band"
+        button = card["sections"][-1]["widgets"][0]["buttonList"]["buttons"][0]
+        assert button["onClick"]["openLink"]["url"] == "http://whoshere.example.org"
+        # plain-text version: one line per person
+        assert r.text.count("\n• ") == 3
+    r = reply_for(parse_event(slash_event(3, "/history", "")), db, s, now=now)
+    assert r.card is None or r.card["card"]  # no events today -> plain text is fine
+    r = reply_for(parse_event(slash_event(1, "/whoshere thomas", " thomas")), db, s, now=now)
+    rows = [w["decoratedText"] for sec in r.card["card"]["sections"] for w in sec["widgets"] if "decoratedText" in w]
+    assert len(rows) == 1 and "Thomas Bates" in rows[0]["text"] and "Here" in rows[0]["text"]

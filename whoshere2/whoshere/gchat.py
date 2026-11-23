@@ -197,35 +197,50 @@ class ChatBridge:
                 return None
             self._seen.append(req.message_name)
         self.last_event_at = time.time()
-        text = chatbot.reply_for(req, self.db, self.settings)
-        if not text or not req.space:
+        reply = chatbot.reply_for(req, self.db, self.settings)
+        if not reply or not req.space:
             return None
         log.info("Chat: %s asked %r (command %s)", req.user_email or req.user_name, req.text, req.command_id)
         private = (self.settings.chat_private_replies and req.user_name
                    and req.space_type not in ("DIRECT_MESSAGE", ""))
-        self.send(req.space, text, thread=req.thread, private_to=req.user_name if private else None)
-        return text
+        self.send(req.space, reply, thread=req.thread, private_to=req.user_name if private else None)
+        return reply.text
 
-    def send(self, space: str, text: str, thread: str | None = None, private_to: str | None = None) -> None:
-        body: dict = {"text": text}
-        params = {}
-        if thread:
-            body["thread"] = {"name": thread}
-            params["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
-        if private_to:
-            body["privateMessageViewer"] = {"name": private_to}
+    def send(self, space: str, reply, thread: str | None = None, private_to: str | None = None) -> None:
+        """Post a reply. Tries, in order: card, then plain text; privately, then to the space.
+
+        The first one Chat accepts wins, so a reply always gets through if anything can.
+        """
+        if isinstance(reply, str):
+            reply = chatbot.Reply(reply)
         url = f"{self.chat_url}/v1/{space}/messages"
-        if params:
-            url += "?" + urllib.parse.urlencode(params)
-        status, payload = _http("POST", url, body, self._headers())
-        if status != 200 and private_to:
-            # If a private reply isn't possible here, answer normally rather than not at all.
-            log.info("Private reply refused (%s); replying in the space", _err(status, payload))
-            body.pop("privateMessageViewer")
+        if thread:
+            url += "?" + urllib.parse.urlencode({"messageReplyOption": "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"})
+
+        attempts = []
+        for viewer in ([private_to, None] if private_to else [None]):
+            if reply.card:
+                attempts.append(("card", viewer))
+            attempts.append(("text", viewer))
+
+        last = None
+        for kind, viewer in attempts:
+            if kind == "card":
+                body: dict = {"cardsV2": [reply.card], "fallbackText": reply.text[:400]}
+            else:
+                body = {"text": reply.text}
+            if thread:
+                body["thread"] = {"name": thread}
+            if viewer:
+                body["privateMessageViewer"] = {"name": viewer}
             status, payload = _http("POST", url, body, self._headers())
-        if status != 200:
-            raise ChatSetupError(f"Chat API refused the reply ({_err(status, payload)}).")
-        self.replies_sent += 1
+            if status == 200:
+                self.replies_sent += 1
+                return
+            last = (status, payload)
+            log.info("Chat refused a %s%s reply (%s); trying the next way", kind,
+                     " private" if viewer else "", _err(status, payload))
+        raise ChatSetupError(f"Chat API refused the reply ({_err(*last)}).")
 
     def check(self) -> str:
         """For the admin page's test button: can we get a token with this key?"""
