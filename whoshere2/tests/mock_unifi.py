@@ -31,16 +31,16 @@ DEVICES = [
 NAMES = {
     "90:83:3e:7d:d3:6b": "Alexs-iPhone",
     "28:de:cf:88:f7:a2": "David's Galaxy S24",
-    "08:51:dc:e1:33:cf": "Jenny-iPhone",
+    "08:51:dc:e1:33:cf": "Priyas-iPhone",
     "3c:22:fb:10:20:30": "Front Desk PC",
     "da:11:22:33:44:55": "iPhone",
-    "f0:18:98:aa:bb:cc": "Toms-Pixel-8",
+    "f0:18:98:aa:bb:cc": "Taylors-Pixel-8",
     "f4:0f:24:11:22:33": "Morgans-iPhone",
 }
 WIRED = {"3c:22:fb:10:20:30"}
 
 STATE = {"online": {}, "ips": {}, "ssids": {}, "legacy_key_ok": True}
-# online: client mac -> AP mac; ips / ssids: per-client overrides (default Wi-Fi is "Ironwood Staff");
+# online: client mac -> AP mac; ips / ssids: per-client overrides (default Wi-Fi is "Staff WiFi");
 # legacy_key_ok: whether the classic API (stat/sta) accepts the API key
 LOCK = threading.Lock()
 SESSION = "sess-123"
@@ -155,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
                     row = {"mac": mac, "hostname": NAMES.get(mac, ""), "is_wired": mac in WIRED, "ip": ip_for(mac)}
                     row["sw_mac" if mac in WIRED else "ap_mac"] = ap
                     if mac not in WIRED:
-                        row["essid"] = ssids.get(mac, "Ironwood Staff")
+                        row["essid"] = ssids.get(mac, "Staff WiFi")
                     data.append(row)
                 return self._send(200, {"meta": {"rc": "ok"}, "data": data})
         self._send(404, {"error": "not found"})

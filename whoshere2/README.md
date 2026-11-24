@@ -71,7 +71,7 @@ Data (people, devices, history) lives in the `whoshere-data` Docker volume. It s
 1. Click **Admin** and sign in with `ADMIN_PASSWORD`.
 2. **Status**: check that it says *Connected to UniFi*. If not, the error says what's wrong (bad key, wrong address, unknown site…).
 3. **People**: add staff, or paste your old v1 `users.txt` into **Import from Who's Here v1**.
-4. For anyone without a device, click **Assign a device**. Phones currently online are listed first, along with any whose name matches the person ("Toms-Pixel-8" → Tom). Pick it and click **Assign**.
+4. For anyone without a device, click **Assign a device**. Phones currently online are listed first, along with any whose name matches the person ("Taylors-Pixel-8" → Tom). Pick it and click **Assign**.
 5. **Locations** (optional): rename access points if their UniFi names aren't friendly.
 
 Each tracked phone must have **Private Wi-Fi Address** (iOS) / **Randomized MAC** (Android) turned off for your network. Otherwise its MAC address changes and the person disappears. Devices using a private address are tagged **private** in the list.
@@ -118,7 +118,7 @@ python -m whoshere import /data/whoshere-export.json            # add --replace 
 
 Who's Here sees every device on the UniFi site, whichever network it joined, so staff are tracked on all of your networks with no setup. Two settings make several networks easier to live with:
 
-- `WIFI_NETWORKS=Ironwood Staff, Ironwood Office` lists your staff networks. The **Devices** list then only shows phones on those networks (there's a link to show everything), and **Add my phone** only accepts phones on them.
+- `WIFI_NETWORKS=Staff WiFi, Office WiFi` lists your staff networks. The **Devices** list then only shows phones on those networks (there's a link to show everything), and **Add my phone** only accepts phones on them.
 - `SHOW_WIFI_NETWORK=true` (the default) shows the network next to each person's location on the board, and on the Devices and History pages.
 
 Phones keep Private Wi-Fi Address per network, so staff need it **off on each staff network**. Otherwise the same phone shows up under a different MAC address on the other one. If that has already happened, assign both addresses to the person on the **Devices** page.
@@ -132,9 +132,9 @@ Staff can ask Who's Here from Google Chat:
 | Command | What it does |
 |---|---|
 | `/whoshere` | Who's on campus right now, and where |
-| `/whoshere Thomas` | Everyone whose name contains "Thomas": here (where, since when) or last seen |
+| `/whoshere Taylor` | Everyone whose name contains "Taylor": here (where, since when) or last seen |
 | `/allclear` | Is it safe to arm the alarm? All clear, who's still here (and who may be leaving), or "can't confirm" if UniFi data is out of date |
-| `/history` / `/history Thomas` | Today's arrivals and departures |
+| `/history` / `/history Taylor` | Today's arrivals and departures |
 
 In a direct message with the app, plain words work too: "all clear?", a name, "history", "help". In a shared space, replies are visible only to the person who asked (change with `GOOGLE_CHAT_PRIVATE_REPLIES=false`).
 
@@ -145,7 +145,7 @@ In a direct message with the app, plain words work too: "all clear?", a name, "h
 ### Step 1: Create the Google Cloud project
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com), signed in with your Workspace account.
-2. Create a project, e.g. **whoshere**, under your organization. Note its **project ID** (e.g. `ironwood-whoshere`).
+2. Create a project, e.g. **whoshere**, under your organization. Note its **project ID** (e.g. `example-whoshere`).
 3. **APIs & Services → Library**: enable **Google Chat API** and **Cloud Pub/Sub API**.
 
 ### Step 2: Create the Pub/Sub topic and subscription
@@ -245,7 +245,7 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 | `DEVICE_RETENTION_DAYS` | `30` | Forget unassigned (guest) devices after this |
 | `SELF_REGISTER` | `false` | Turn on the `/register` page so staff can add their own phone |
 | `REGISTER_CODE` | | Optional code staff must enter on `/register` |
-| `WIFI_NETWORKS` | | Staff Wi-Fi networks, comma-separated, e.g. `Ironwood Staff, Ironwood Office`. Filters the Devices list and "Add my phone"; doesn't change who counts as here |
+| `WIFI_NETWORKS` | | Staff Wi-Fi networks, comma-separated, e.g. `Staff WiFi, Office WiFi`. Filters the Devices list and "Add my phone"; doesn't change who counts as here |
 | `GOOGLE_CHAT_SUBSCRIPTION` | | Turns on Google Chat: `projects/<project-id>/subscriptions/<name>` (see [Google Chat](#google-chat)) |
 | `GOOGLE_CHAT_ALLOWED` | | Emails and/or `@domains` allowed to use the Chat app; empty = anyone it's shared with |
 | `GOOGLE_CHAT_PRIVATE_REPLIES` | `true` | In shared spaces, only the person who asked sees the reply |

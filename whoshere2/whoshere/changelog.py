@@ -7,12 +7,20 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "3.5.0",
+        "date": "2026-11-24",
+        "changes": [
+            "Removed real names, Wi-Fi network names and hostnames from the examples, tests and screenshots; they now use made-up ones",
+            "README screenshots updated to the current look",
+        ],
+    },
+    {
         "version": "3.4.0",
         "date": "2026-11-23",
         "changes": [
             "Google Chat answers are now cards: one row per person, with the name in bold, where they are above and since when below",
             "The all-clear headline is coloured (green, red or orange), and cards have an \"Open the board\" button when BOARD_URL is set",
-            "/whoshere Thomas and /history get the same one-row-per-entry layout",
+            "/whoshere Taylor and /history get the same one-row-per-entry layout",
             "If Chat won't take a card, the plain-text answer puts each person on their own line",
         ],
     },
@@ -47,7 +55,7 @@ CHANGELOG = [
         "version": "3.0.0",
         "date": "2026-11-20",
         "changes": [
-            "Google Chat app: /whoshere lists who's on campus, /whoshere Thomas looks people up by name",
+            "Google Chat app: /whoshere lists who's on campus, /whoshere Taylor looks people up by name",
             "/allclear answers \"is it safe to arm?\": all clear, who's still here (and who may be leaving), or can't confirm when UniFi data is stale",
             "/history shows today's arrivals and departures, for everyone or one person",
             "In a direct message, plain words work too: \"all clear?\", a name, \"history\", \"help\"",

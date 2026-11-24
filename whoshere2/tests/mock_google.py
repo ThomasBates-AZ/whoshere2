@@ -107,12 +107,12 @@ class FakeGoogle:
 # ----- Chat events, as Google sends them
 
 def slash_event(command_id: int, text: str, arg: str, *, space_type="DIRECT_MESSAGE", space="spaces/AAA",
-                email="thomas@ironwood.church", msg="spaces/AAA/messages/1"):
+                email="pat@example.org", msg="spaces/AAA/messages/1"):
     return {
         "type": "MESSAGE",
         "eventTime": "2026-11-20T17:00:00Z",
         "space": {"name": space, "spaceType": space_type},
-        "user": {"name": "users/111", "displayName": "Thomas Bates", "email": email},
+        "user": {"name": "users/111", "displayName": "Pat Lee", "email": email},
         "message": {
             "name": msg, "text": text, "argumentText": arg,
             "thread": {"name": f"{space}/threads/T1"},
@@ -124,15 +124,15 @@ def slash_event(command_id: int, text: str, arg: str, *, space_type="DIRECT_MESS
     }
 
 
-def dm_event(text: str, email="thomas@ironwood.church", msg="spaces/AAA/messages/2"):
+def dm_event(text: str, email="pat@example.org", msg="spaces/AAA/messages/2"):
     return {"type": "MESSAGE", "space": {"name": "spaces/AAA", "spaceType": "DIRECT_MESSAGE"},
-            "user": {"name": "users/111", "displayName": "Thomas Bates", "email": email},
+            "user": {"name": "users/111", "displayName": "Pat Lee", "email": email},
             "message": {"name": msg, "text": text, "argumentText": text, "thread": {"name": "spaces/AAA/threads/T2"}}}
 
 
 def addon_command_event(command_id: int, text: str):
     return {"chat": {
-        "user": {"name": "users/111", "email": "thomas@ironwood.church"},
+        "user": {"name": "users/111", "email": "pat@example.org"},
         "appCommandPayload": {
             "appCommandMetadata": {"appCommandId": command_id, "appCommandType": "SLASH_COMMAND"},
             "space": {"name": "spaces/BBB", "spaceType": "SPACE"},
