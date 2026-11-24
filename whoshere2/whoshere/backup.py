@@ -11,7 +11,7 @@ The export is a JSON file:
       "hidden_devices": ["3c:22:fb:10:20:30"],
       "history":   [{"person_id": 1, "kind": "arrive", "at": 1794520674.4,
                      "location_mac": "b7:c5:21:08:82:32", "device_mac": "90:83:3e:7d:d3:6b",
-                     "wifi": "Ironwood Staff"}]
+                     "wifi": "Staff WiFi"}]
     }
 
 "id"/"person_id" only link history to people inside the file; they are not database ids.

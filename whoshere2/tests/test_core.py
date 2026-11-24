@@ -58,7 +58,7 @@ def test_randomized_detection():
 # ---------------------------------------------------------------- presence rules
 
 def test_arrival_then_departure_after_grace(db):
-    pid = add_person(db, "Steve", PHONE)
+    pid = add_person(db, "Alex", PHONE)
     t0 = 1_000_000.0
     presence.apply_snapshot(db, snap({}, t0), GRACE)
     assert db.one("SELECT state FROM presence")["state"] == "away"
@@ -89,7 +89,7 @@ def test_arrival_then_departure_after_grace(db):
 
 
 def test_outage_does_not_count_as_absence(db):
-    add_person(db, "Steve", PHONE)
+    add_person(db, "Alex", PHONE)
     t0 = 2_000_000.0
     presence.apply_snapshot(db, snap({PHONE: AP1}, t0), GRACE)
     # UniFi unreachable for an hour; the next good poll happens to miss the dozing phone
@@ -99,7 +99,7 @@ def test_outage_does_not_count_as_absence(db):
 
 
 def test_stale_data_never_says_all_clear(db):
-    add_person(db, "Steve", PHONE)
+    add_person(db, "Alex", PHONE)
     t0 = 3_000_000.0
     presence.apply_snapshot(db, snap({}, t0), GRACE)
     assert presence.board(db, stale_after=180, now=t0 + 60)["verdict"] == "clear"
@@ -110,7 +110,7 @@ def test_stale_data_never_says_all_clear(db):
 
 
 def test_unknown_ap_still_counts_as_here(db):
-    add_person(db, "Steve", PHONE)
+    add_person(db, "Alex", PHONE)
     presence.apply_snapshot(db, snap({PHONE: "11:22:33:44:55:66"}, 4_000_000.0), GRACE)
     b = presence.board(db, 300, now=4_000_001.0)
     assert b["verdict"] == "occupied" and b["here"][0]["location"] == "Unknown location"
@@ -124,7 +124,7 @@ def test_untracked_people_reported_but_not_blocking(db):
 
 
 def test_alias_overrides_unifi_name(db):
-    add_person(db, "Steve", PHONE)
+    add_person(db, "Alex", PHONE)
     presence.apply_snapshot(db, snap({PHONE: AP1}, 6_000_000.0), GRACE)
     db.run("UPDATE locations SET alias = 'Booth' WHERE mac = ?", (AP1,))
     assert presence.board(db, 300, now=6_000_001.0)["here"][0]["location"] == "Booth"
@@ -138,7 +138,7 @@ def test_catalog_records_all_clients(db):
 
 
 def test_prune_keeps_assigned_devices(db):
-    add_person(db, "Steve", PHONE)
+    add_person(db, "Alex", PHONE)
     old = time.time() - 90 * 86400
     presence.apply_snapshot(db, snap({PHONE: AP1, "aa:aa:aa:aa:aa:aa": AP2}, old), GRACE)
     presence.apply_snapshot(db, snap({}, old + 60), GRACE)
@@ -150,7 +150,7 @@ def test_prune_keeps_assigned_devices(db):
 # ---------------------------------------------------------------- v1 import
 
 def test_import_v1(db):
-    text = "Steve Marcus  90:83:3e:7d:d3:6b\nDavid Wells\t28-DE-CF-88-F7-A2\n\nbad line\nJenny Nitzel  09:51:dc:e1:33:cf\n"
+    text = "Alex Rivera  90:83:3e:7d:d3:6b\nSam Ortiz\t28-DE-CF-88-F7-A2\n\nbad line\nPriya Shah  09:51:dc:e1:33:cf\n"
     entries, problems = parse_v1(text)
     assert len(entries) == 3 and len(problems) == 1
     added, assigned, _ = import_v1(db, text)
@@ -245,8 +245,8 @@ def test_register_page_flow(mock, tmp_path, monkeypatch):
         urllib.request.urlopen(req).read()
 
     for k, v in {"DATA_DIR": str(tmp_path), "UNIFI_URL": url, "UNIFI_API_KEY": "test-key",
-                 "ADMIN_PASSWORD": "admin", "SELF_REGISTER": "true", "REGISTER_CODE": "ironwood",
-                 "STAFF_WIFI_NAME": "Ironwood Staff"}.items():
+                 "ADMIN_PASSWORD": "admin", "SELF_REGISTER": "true", "REGISTER_CODE": "staff-code",
+                 "STAFF_WIFI_NAME": "Staff WiFi"}.items():
         monkeypatch.setenv(k, v)
     settings = Settings.from_env()
     app = create_app(settings, start_poller=False)
@@ -270,7 +270,7 @@ def test_register_page_flow(mock, tmp_path, monkeypatch):
         private = "da:11:22:33:44:55"
         set_online({private: AP1})
         set_ips({private: "127.0.0.1"})
-        assert "private Wi-Fi address" in get() and "Ironwood Staff" in get()
+        assert "private Wi-Fi address" in get() and "Staff WiFi" in get()
 
         set_online({PHONE: AP1})
         set_ips({})
@@ -281,7 +281,7 @@ def test_register_page_flow(mock, tmp_path, monkeypatch):
         assert "That registration code" in post(name="Alex Rivera", code="wrong")
         assert db_people(settings) == []
 
-        done = post(name="  Alex   Rivera ", code="ironwood")
+        done = post(name="  Alex   Rivera ", code="staff-code")
         assert "registered to <strong>Alex Rivera</strong>" in done
         assert db_people(settings) == [("Alex Rivera", PHONE)]
         assert "already registered to <strong>Alex Rivera</strong>" in get()
@@ -289,7 +289,7 @@ def test_register_page_flow(mock, tmp_path, monkeypatch):
         # A second phone with the same name (any case) joins the existing person
         set_online({"f0:18:98:aa:bb:cc": AP2})
         set_ips({"f0:18:98:aa:bb:cc": "127.0.0.1"})
-        post(name="alex rivera", code="ironwood")
+        post(name="alex rivera", code="staff-code")
         assert sorted(db_people(settings)) == [("Alex Rivera", PHONE), ("Alex Rivera", "f0:18:98:aa:bb:cc")]
     finally:
         set_ips({})
@@ -407,12 +407,12 @@ def _set(url, what, body):
 def test_integration_client_adds_wifi_names(mock):
     url, set_online = mock
     set_online({PHONE: AP1, "28:de:cf:88:f7:a2": AP2, "3c:22:fb:10:20:30": "0c:ea:14:00:00:01"})
-    _set(url, "ssids", {"28:de:cf:88:f7:a2": "Ironwood Office"})
+    _set(url, "ssids", {"28:de:cf:88:f7:a2": "Office WiFi"})
     try:
         s = IntegrationClient(url, "test-key", "default", False).snapshot()
         by = {c.mac: c for c in s.clients}
-        assert s.ssid_ok and by[PHONE].ssid == "Ironwood Staff"
-        assert by["28:de:cf:88:f7:a2"].ssid == "Ironwood Office"
+        assert s.ssid_ok and by[PHONE].ssid == "Staff WiFi"
+        assert by["28:de:cf:88:f7:a2"].ssid == "Office WiFi"
         assert by["3c:22:fb:10:20:30"].ssid is None  # wired
     finally:
         _set(url, "ssids", {})
@@ -431,7 +431,7 @@ def test_wifi_names_refused_keeps_working(mock):
         _set(url, "legacy_key", {"ok": True})
         assert not c.snapshot().ssid_ok
         c._ssid_retry_at = 0
-        assert c.snapshot().clients[0].ssid == "Ironwood Staff"
+        assert c.snapshot().clients[0].ssid == "Staff WiFi"
     finally:
         _set(url, "legacy_key", {"ok": True})
 
@@ -447,7 +447,7 @@ def test_session_client_reads_essid(mock):
     url, set_online = mock
     set_online({PHONE: AP2})
     s = SessionClient(url, "whoshere", "secret", "default", False).snapshot()
-    assert s.clients[0].ssid == "Ironwood Staff"
+    assert s.clients[0].ssid == "Staff WiFi"
 
 
 def test_presence_records_wifi(db):
@@ -455,17 +455,17 @@ def test_presence_records_wifi(db):
     t0 = 9_000_000.0
     presence.apply_snapshot(db, snap({}, t0), GRACE)
     s = snap({PHONE: AP1}, t0 + 60)
-    s.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Ironwood Office")]
+    s.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Office WiFi")]
     presence.apply_snapshot(db, s, GRACE)
     b = presence.board(db, 300, now=t0 + 61)
-    assert b["here"][0]["wifi"] == "Ironwood Office"
-    assert db.one("SELECT ssid FROM events WHERE kind = 'arrive'")["ssid"] == "Ironwood Office"
-    assert db.one("SELECT last_ssid FROM devices WHERE mac = ?", (PHONE,))["last_ssid"] == "Ironwood Office"
+    assert b["here"][0]["wifi"] == "Office WiFi"
+    assert db.one("SELECT ssid FROM events WHERE kind = 'arrive'")["ssid"] == "Office WiFi"
+    assert db.one("SELECT last_ssid FROM devices WHERE mac = ?", (PHONE,))["last_ssid"] == "Office WiFi"
     # a poll without names (lookup refused) keeps the device's last known network
     s2 = snap({PHONE: AP1}, t0 + 120)
     s2.ssid_ok = False
     presence.apply_snapshot(db, s2, GRACE)
-    assert db.one("SELECT last_ssid FROM devices WHERE mac = ?", (PHONE,))["last_ssid"] == "Ironwood Office"
+    assert db.one("SELECT last_ssid FROM devices WHERE mac = ?", (PHONE,))["last_ssid"] == "Office WiFi"
 
 
 def test_existing_database_gets_new_columns(tmp_path):
@@ -490,12 +490,12 @@ def test_existing_database_gets_new_columns(tmp_path):
 def test_watched_wifi_setting(monkeypatch, tmp_path):
     from whoshere.config import Settings
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("WIFI_NETWORKS", " Ironwood Staff , Ironwood Office,Ironwood Staff ")
+    monkeypatch.setenv("WIFI_NETWORKS", " Staff WiFi , Office WiFi,Staff WiFi ")
     monkeypatch.delenv("STAFF_WIFI_NAME", raising=False)
     s = Settings.from_env()
-    assert s.wifi_networks == ("Ironwood Staff", "Ironwood Office")
-    assert s.staff_wifi == "Ironwood Staff or Ironwood Office"
-    assert s.is_watched_wifi("ironwood office") and not s.is_watched_wifi("Ironwood Guest")
+    assert s.wifi_networks == ("Staff WiFi", "Office WiFi")
+    assert s.staff_wifi == "Staff WiFi or Office WiFi"
+    assert s.is_watched_wifi("office wifi") and not s.is_watched_wifi("Guest WiFi")
     assert not s.is_watched_wifi(None)
     assert s.show_wifi_network
     monkeypatch.setenv("SHOW_WIFI_NETWORK", "false")
@@ -516,7 +516,7 @@ def test_two_networks_register_and_devices(mock, tmp_path, monkeypatch):
     staff2, guest = "28:de:cf:88:f7:a2", "f4:0f:24:11:22:33"
     for k, v in {"DATA_DIR": str(tmp_path), "UNIFI_URL": url, "UNIFI_API_KEY": "test-key",
                  "ADMIN_PASSWORD": "admin", "SELF_REGISTER": "true",
-                 "WIFI_NETWORKS": "Ironwood Staff, Ironwood Office"}.items():
+                 "WIFI_NETWORKS": "Staff WiFi, Office WiFi"}.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("STAFF_WIFI_NAME", raising=False)
     monkeypatch.delenv("REGISTER_CODE", raising=False)
@@ -532,13 +532,13 @@ def test_two_networks_register_and_devices(mock, tmp_path, monkeypatch):
 
     try:
         set_online({PHONE: AP1, staff2: AP2, guest: AP2, "3c:22:fb:10:20:30": "0c:ea:14:00:00:01"})
-        _set(url, "ssids", {staff2: "Ironwood Office", guest: "Ironwood Guest"})
+        _set(url, "ssids", {staff2: "Office WiFi", guest: "Guest WiFi"})
 
         # Registration from the guest network is refused and names both staff networks
         _set(url, "ips", {guest: "127.0.0.1"})
         page = get("/register")
-        assert "connected to <strong>Ironwood Guest</strong>" in page
-        assert "<strong>Ironwood Staff</strong> or <strong>Ironwood Office</strong>" in page
+        assert "connected to <strong>Guest WiFi</strong>" in page
+        assert "<strong>Staff WiFi</strong> or <strong>Office WiFi</strong>" in page
         # ...but works from the second staff network
         _set(url, "ips", {staff2: "127.0.0.1"})
         assert "Add my phone</button>" in get("/register")
@@ -551,7 +551,7 @@ def test_two_networks_register_and_devices(mock, tmp_path, monkeypatch):
         page = get("/admin/devices")
         assert PHONE in page and staff2 in page
         assert guest not in page and "3c:22:fb:10:20:30" not in page
-        assert "Show all networks" in page and "Ironwood Office" in page
+        assert "Show all networks" in page and "Office WiFi" in page
         page = get("/admin/devices?show=unassigned&net=all")
         assert guest in page and "3c:22:fb:10:20:30" in page
 
@@ -559,10 +559,10 @@ def test_two_networks_register_and_devices(mock, tmp_path, monkeypatch):
         pid = add_person(app.state.db, "Sam Ortiz")
         app.state.db.run("UPDATE devices SET person_id = ? WHERE mac = ?", (pid, staff2))
         app.state.poller.poll_once()
-        assert '<span class="wifi">Ironwood Office</span>' in get("/")
+        assert '<span class="wifi">Office WiFi</span>' in get("/")
         status = json.loads(get("/api/status"))
-        assert status["on_site"][0]["wifi"] == "Ironwood Office"
-        assert "Ironwood Staff, Ironwood Office" in get("/admin/status")
+        assert status["on_site"][0]["wifi"] == "Office WiFi"
+        assert "Staff WiFi, Office WiFi" in get("/admin/status")
     finally:
         server.should_exit = True
         _set(url, "ssids", {})
@@ -573,13 +573,13 @@ def test_export_import_keeps_wifi_in_history(db):
     from whoshere.backup import export_data, import_text
     import json
     pid = add_person(db, "Alex", PHONE)
-    db.run("INSERT INTO events (person_id, kind, at, uplink, ssid) VALUES (?, 'arrive', 1, ?, 'Ironwood Office')",
+    db.run("INSERT INTO events (person_id, kind, at, uplink, ssid) VALUES (?, 'arrive', 1, ?, 'Office WiFi')",
            (pid, AP1))
     data = export_data(db, include_history=True)
-    assert data["history"][0]["wifi"] == "Ironwood Office"
+    assert data["history"][0]["wifi"] == "Office WiFi"
     other = Database(db.path + ".2")
     import_text(other, json.dumps(data))
-    assert other.one("SELECT ssid FROM events")["ssid"] == "Ironwood Office"
+    assert other.one("SELECT ssid FROM events")["ssid"] == "Office WiFi"
 
 
 # ---------------------------------------------------------------- Docker address check
@@ -614,14 +614,14 @@ def _chat_settings(monkeypatch, tmp_path, **extra):
 
 
 def _campus(db, now):
-    """Alex here in the Sound Booth, Sam left this morning, Jordan untracked, Thomas never seen."""
+    """Alex here in the Sound Booth, Sam left this morning, Jordan untracked, Taylor never seen."""
     alex = add_person(db, "Alex Rivera", PHONE)
     sam = add_person(db, "Sam Ortiz", "28:de:cf:88:f7:a2")
     add_person(db, "Jordan Lee")
-    add_person(db, "Thomas Bates", "f4:0f:24:11:22:33")
-    add_person(db, "Thomas Nguyen", "f4:0f:24:11:22:44")
+    add_person(db, "Taylor Brooks", "f4:0f:24:11:22:33")
+    add_person(db, "Taylor Nguyen", "f4:0f:24:11:22:44")
     s = snap({PHONE: AP1}, now - 30)
-    s.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Ironwood Staff")]
+    s.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Staff WiFi")]
     presence.apply_snapshot(db, s, GRACE)
     db.run("INSERT INTO events (person_id, kind, at, uplink) VALUES (?, 'arrive', ?, ?)", (sam, now - 3600, AP2))
     db.run("INSERT INTO events (person_id, kind, at, uplink) VALUES (?, 'depart', ?, ?)", (sam, now - 1800, AP2))
@@ -631,9 +631,9 @@ def _campus(db, now):
 def test_parse_event_formats():
     from whoshere.chatbot import parse_event
     from mock_google import addon_command_event, dm_event, slash_event
-    r = parse_event(slash_event(1, "/whoshere Thomas", " Thomas", space_type="SPACE"))
-    assert (r.kind, r.command_id, r.text, r.space, r.space_type) == ("message", 1, "Thomas", "spaces/AAA", "SPACE")
-    assert r.user_email == "thomas@ironwood.church" and r.thread == "spaces/AAA/threads/T1"
+    r = parse_event(slash_event(1, "/whoshere Taylor", " Taylor", space_type="SPACE"))
+    assert (r.kind, r.command_id, r.text, r.space, r.space_type) == ("message", 1, "Taylor", "spaces/AAA", "SPACE")
+    assert r.user_email == "pat@example.org" and r.thread == "spaces/AAA/threads/T1"
     # annotation only (no message.slashCommand)
     e = slash_event(2, "/allclear", "")
     del e["message"]["slashCommand"]
@@ -661,13 +661,13 @@ def test_chat_replies(db, monkeypatch, tmp_path):
 
     out = ask(slash_event(1, "/whoshere", ""))
     assert "Not clear — 1 person on campus" in out
-    assert "*Alex Rivera* — Sound Booth · Ironwood Staff" in out
+    assert "*Alex Rivera* — Sound Booth · Staff WiFi" in out
     assert "Not tracked" in out and "Jordan Lee" in out
     assert out.endswith("\nBoard: http://whoshere.local:8085")
     assert "|" not in out
 
-    out = ask(slash_event(1, "/whoshere thomas", " thomas"))
-    assert "*Thomas Bates*" in out and "*Thomas Nguyen*" in out and "Alex" not in out
+    out = ask(slash_event(1, "/whoshere taylor", " taylor"))
+    assert "*Taylor Brooks*" in out and "*Taylor Nguyen*" in out and "Alex" not in out
     out = ask(slash_event(1, "/whoshere alex", " alex"))
     assert out.startswith("🟢 *Alex Rivera*")
     assert "Nobody on the board matches “Zed”" in ask(slash_event(1, "/whoshere Zed", " Zed"))
@@ -684,7 +684,7 @@ def test_chat_replies(db, monkeypatch, tmp_path):
     assert "Not clear" in ask(dm_event("all clear?"))
     assert "*Alex Rivera*" in ask(dm_event("who's here"))
     assert "/allclear" in ask(dm_event("help"))
-    assert "Thomas Bates" in ask(dm_event("Thomas"))
+    assert "Taylor Brooks" in ask(dm_event("Taylor"))
 
 
 def test_chat_all_clear_and_stale(db, monkeypatch, tmp_path):
@@ -703,7 +703,7 @@ def test_chat_all_clear_and_stale(db, monkeypatch, tmp_path):
 def test_chat_allowlist(db, monkeypatch, tmp_path):
     from whoshere.chatbot import parse_event, reply_for
     from mock_google import slash_event
-    s = _chat_settings(monkeypatch, tmp_path, GOOGLE_CHAT_ALLOWED="@ironwood.church, guest@gmail.com")
+    s = _chat_settings(monkeypatch, tmp_path, GOOGLE_CHAT_ALLOWED="@example.org, guest@gmail.com")
     ok = reply_for(parse_event(slash_event(2, "/allclear", "")), db, s).text
     assert "not on the list" not in ok
     out = reply_for(parse_event(slash_event(2, "/allclear", "", email="someone@else.org")), db, s).text
@@ -780,8 +780,8 @@ def test_chat_subscription_setting(monkeypatch, tmp_path):
     from whoshere.config import Settings
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("GOOGLE_CHAT_SUBSCRIPTION", "whoshere-chat")
-    monkeypatch.setenv("GOOGLE_CHAT_PROJECT", "ironwood-whoshere")
-    assert Settings.from_env().chat_subscription == "projects/ironwood-whoshere/subscriptions/whoshere-chat"
+    monkeypatch.setenv("GOOGLE_CHAT_PROJECT", "example-whoshere")
+    assert Settings.from_env().chat_subscription == "projects/example-whoshere/subscriptions/whoshere-chat"
     monkeypatch.delenv("GOOGLE_CHAT_PROJECT")
     with pytest.raises(SystemExit):
         Settings.from_env()
@@ -798,7 +798,7 @@ def test_help_sheets_and_person_history(tmp_path, monkeypatch):
     for k, v in {"DATA_DIR": str(tmp_path), "UNIFI_URL": "http://127.0.0.1:9", "UNIFI_API_KEY": "k",
                  "ADMIN_PASSWORD": "admin", "SELF_REGISTER": "true",
                  "GOOGLE_CHAT_SUBSCRIPTION": "projects/p/subscriptions/s",
-                 "BOARD_URL": "http://solomon.example.org:8085"}.items():
+                 "BOARD_URL": "http://nas.example.org:8085"}.items():
         monkeypatch.setenv(k, v)
     app = create_app(Settings.from_env(), start_poller=False)
     db = app.state.db
@@ -816,13 +816,13 @@ def test_help_sheets_and_person_history(tmp_path, monkeypatch):
     try:
         page = get("/help")
         assert "Reading the board" in page and "Google Chat" in page and "/register" in page
-        assert "http://solomon.example.org:8085" in page
+        assert "http://nas.example.org:8085" in page
         board_sheet = get("/help/sheet/board")
-        assert "Quick guide" in board_sheet and "solomon.example.org:8085/register" in board_sheet
+        assert "Quick guide" in board_sheet and "nas.example.org:8085/register" in board_sheet
         chat_sheet = get("/help/sheet/chat")
         assert "/allclear" in chat_sheet and "Start a chat" in chat_sheet
         generic = get("/help/sheet/board?generic=1")
-        assert "solomon" not in generic and 'class="blank"' in generic
+        assert "nas.example.org" not in generic and 'class="blank"' in generic
         # name on the board links to that person's history
         board = get("/")
         link = re.search(r'href="(/history\?person=%d&amp;days=30)"' % sam, board).group(1).replace("&amp;", "&")
@@ -863,13 +863,13 @@ def test_chat_cards_one_row_per_person(db, monkeypatch, tmp_path):
     from mock_google import slash_event
     s = _chat_settings(monkeypatch, tmp_path, BOARD_URL="http://whoshere.example.org")
     now = time.time()
-    add_person(db, "Bobby <Watkins>", PHONE)
-    add_person(db, "Jeremy Rabideau", "28:de:cf:88:f7:a2")
-    add_person(db, "Thomas Bates", "f4:0f:24:11:22:33")
+    add_person(db, "Casey <Morgan>", PHONE)
+    add_person(db, "Riley Chen", "28:de:cf:88:f7:a2")
+    add_person(db, "Taylor Brooks", "f4:0f:24:11:22:33")
     snap1 = snap({}, now - 30)
-    snap1.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Ironwood Band"),
-                     ClientInfo(mac="28:de:cf:88:f7:a2", name="p", uplink_mac=AP2, ssid="Ironwood Staff"),
-                     ClientInfo(mac="f4:0f:24:11:22:33", name="p", uplink_mac=AP1, ssid="Ironwood Staff")]
+    snap1.clients = [ClientInfo(mac=PHONE, name="p", uplink_mac=AP1, ssid="Band WiFi"),
+                     ClientInfo(mac="28:de:cf:88:f7:a2", name="p", uplink_mac=AP2, ssid="Staff WiFi"),
+                     ClientInfo(mac="f4:0f:24:11:22:33", name="p", uplink_mac=AP1, ssid="Staff WiFi")]
     presence.apply_snapshot(db, snap1, GRACE)
     for cid, cmd in ((1, "/whoshere"), (2, "/allclear")):
         r = reply_for(parse_event(slash_event(cid, cmd, "")), db, s, now=now)
@@ -878,14 +878,14 @@ def test_chat_cards_one_row_per_person(db, monkeypatch, tmp_path):
         assert "Not clear — 3 people on campus" in card["sections"][0]["widgets"][0]["textParagraph"]["text"]
         rows = [w["decoratedText"] for sec in card["sections"] for w in sec["widgets"] if "decoratedText" in w]
         assert len(rows) == 3  # one row each
-        assert rows[0]["text"] == "<b>Bobby &lt;Watkins&gt;</b>"  # names are escaped
-        assert rows[0]["topLabel"] == "Sound Booth · Ironwood Band"
+        assert rows[0]["text"] == "<b>Casey &lt;Morgan&gt;</b>"  # names are escaped
+        assert rows[0]["topLabel"] == "Sound Booth · Band WiFi"
         button = card["sections"][-1]["widgets"][0]["buttonList"]["buttons"][0]
         assert button["onClick"]["openLink"]["url"] == "http://whoshere.example.org"
         # plain-text version: one line per person
         assert r.text.count("\n• ") == 3
     r = reply_for(parse_event(slash_event(3, "/history", "")), db, s, now=now)
     assert r.card is None or r.card["card"]  # no events today -> plain text is fine
-    r = reply_for(parse_event(slash_event(1, "/whoshere thomas", " thomas")), db, s, now=now)
+    r = reply_for(parse_event(slash_event(1, "/whoshere taylor", " taylor")), db, s, now=now)
     rows = [w["decoratedText"] for sec in r.card["card"]["sections"] for w in sec["widgets"] if "decoratedText" in w]
-    assert len(rows) == 1 and "Thomas Bates" in rows[0]["text"] and "Here" in rows[0]["text"]
+    assert len(rows) == 1 and "Taylor Brooks" in rows[0]["text"] and "Here" in rows[0]["text"]

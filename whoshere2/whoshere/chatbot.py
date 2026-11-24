@@ -9,7 +9,7 @@ Commands (IDs are what you enter on the Chat API configuration page):
     2  /allclear          is it safe to arm the alarm?
     3  /history [name]    today's arrivals and departures
 
-In a direct message, plain text works too: "all clear?", "history Thomas", "Thomas", "help".
+In a direct message, plain text works too: "all clear?", "history Taylor", "Taylor", "help".
 """
 from __future__ import annotations
 
@@ -26,9 +26,9 @@ from .timefmt import make_filters
 
 CMD_WHOSHERE, CMD_ALLCLEAR, CMD_HISTORY = 1, 2, 3
 COMMANDS = {
-    CMD_WHOSHERE: ("/whoshere", "Who's on campus. Add a name to look someone up: /whoshere Thomas"),
+    CMD_WHOSHERE: ("/whoshere", "Who's on campus. Add a name to look someone up: /whoshere Taylor"),
     CMD_ALLCLEAR: ("/allclear", "Is it safe to arm the alarm?"),
-    CMD_HISTORY: ("/history", "Today's arrivals and departures. Add a name for one person: /history Thomas"),
+    CMD_HISTORY: ("/history", "Today's arrivals and departures. Add a name for one person: /history Taylor"),
 }
 _BY_NAME = {name.lstrip("/"): cid for cid, (name, _) in COMMANDS.items()}
 MAX_LINES = 40
@@ -97,7 +97,7 @@ def parse_event(event: dict) -> ChatRequest:
     text = text.strip()
 
     cid = int(command_id) if str(command_id or "").isdigit() else None
-    # The command's own name can be left in the text (e.g. "/whoshere Thomas"); take it off.
+    # The command's own name can be left in the text (e.g. "/whoshere Taylor"); take it off.
     m = re.match(r"^/(\w[\w-]*)\s*(.*)$", text, re.S)
     if m:
         if cid is None:
