@@ -57,6 +57,7 @@ class Settings:
     chat_key_file: Path
     chat_allowed: tuple[str, ...]  # emails and @domains allowed to use the app; empty = anyone
     chat_private_replies: bool     # in shared spaces, answer only the person who asked
+    chat_avatar_url: str           # public https image for the card header; empty = no image
     board_url: str                 # link added to Chat replies, e.g. http://whoshere.local:8085
 
     # Web
@@ -120,6 +121,7 @@ class Settings:
             chat_allowed=tuple(a.strip().lower() for a in _str("GOOGLE_CHAT_ALLOWED").split(",") if a.strip()),
             chat_private_replies=_bool("GOOGLE_CHAT_PRIVATE_REPLIES", True),
             board_url=_str("BOARD_URL").rstrip("/"),
+            chat_avatar_url=_str("CHAT_AVATAR_URL"),
             wifi_networks=wifi_networks,
             title=_str("SITE_TITLE", "Who's Here?") or "Who's Here?",
             admin_password=os.environ.get("ADMIN_PASSWORD", ""),

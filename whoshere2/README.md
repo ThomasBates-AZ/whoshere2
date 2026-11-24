@@ -40,11 +40,17 @@ If you can't use an API key, leave it blank and set `UNIFI_USERNAME` / `UNIFI_PA
 
 #### Portainer (recommended)
 
+The repository is private, so Portainer needs a read-only GitHub token to fetch it. To make one: **GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+- **Repository access:** *Only select repositories* → `whoshere2`
+- **Permissions:** *Contents: Read-only*
+- **Expiration:** pick a date and put a reminder in your calendar. When it expires, Portainer can't pull updates until you paste in a new one.
+
 1. **Stacks → + Add stack**, name it `whoshere`.
 2. Build method **Repository**:
    - Repository URL: `https://github.com/ThomasBates-AZ/whoshere2`
    - Repository reference: `refs/heads/main`
    - Compose path: `whoshere2/docker-compose.yml`
+   - **Authentication**: on. Username: your GitHub username. Personal access token: the token above.
 3. Optional: turn on **GitOps updates** (polling) so the stack redeploys by itself whenever `main` changes.
 4. **Environment variables → Advanced mode**: paste your settings from [`.env.example`](.env.example). At least `UNIFI_URL`, `UNIFI_API_KEY` and `ADMIN_PASSWORD`; anything left out uses its default.
 5. **Deploy the stack**, then open `http://<docker-host>:8085`. The footer shows the version that's running.
@@ -62,7 +68,7 @@ To update later, open the stack and click **Pull and redeploy** (or let GitOps u
 
 #### Pre-built image
 
-Every merge to `main` publishes `ghcr.io/thomasbates-az/whoshere2` (Intel and ARM, tagged `latest` and the version number). To use it instead of building, swap `build: .` for the `image:` line in `docker-compose.yml`. If the pull is refused, set the package to public under the repository's **Packages** on GitHub.
+Every merge to `main` publishes `ghcr.io/thomasbates-az/whoshere2` (Intel and ARM, tagged `latest` and the version number). Because the repository is private, the image is private too. Pulling it needs a GitHub *classic* token with the `read:packages` scope, added in Portainer under **Registries**. For most setups, building from the repository as above is simpler.
 
 Data (people, devices, history) lives in the `whoshere-data` Docker volume. It survives updates and rebuilds.
 
@@ -173,7 +179,7 @@ In a direct message with the app, plain words work too: "all clear?", a name, "h
 
 - **Build this Chat app as a Google Workspace add-on**: if this box is shown and ticked, untick it and confirm **Disable**. (Who's Here understands both formats, but these steps assume it's off.)
 - **App name**: `Who's Here`
-- **Avatar URL**: `https://raw.githubusercontent.com/ThomasBates-AZ/whoshere2/main/whoshere2/docs/chat-avatar.png`
+- **Avatar URL**: a public `https` link to the app icon. Upload [`docs/chat-avatar.png`](docs/chat-avatar.png) somewhere public, such as your organization's website, and use that link. (This repository is private, so GitHub links to the file won't work.) Set the same link as `CHAT_AVATAR_URL` to show the icon at the top of Chat answers too.
 - **Description**: `Who's on campus, and is it safe to arm?`
 - **Functionality**: tick **Join spaces and group conversations** if you want to use it in spaces as well as direct messages.
 - **Connection settings**: **Cloud Pub/Sub**, topic `projects/<project-id>/topics/whoshere-chat`. If this section shows a service account email, give that account **Pub/Sub Publisher** on the topic as well, as in step 2.
@@ -250,6 +256,7 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 | `GOOGLE_CHAT_ALLOWED` | | Emails and/or `@domains` allowed to use the Chat app; empty = anyone it's shared with |
 | `GOOGLE_CHAT_PRIVATE_REPLIES` | `true` | In shared spaces, only the person who asked sees the reply |
 | `BOARD_URL` | | Link to the board added to Chat replies |
+| `CHAT_AVATAR_URL` | | Public `https` link to an icon shown at the top of Chat answers |
 | `NETWORK_MODE` | `bridge` | `host` lets "Add my phone" see phones' real addresses (needed on Synology). The board is then on `PORT` |
 | `HOST_PORT` | `8085` | Port for the board in bridge mode |
 | `PORT` | `8080` | Port the app listens on (the board's port in host mode) |

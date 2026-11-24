@@ -32,7 +32,6 @@ COMMANDS = {
 }
 _BY_NAME = {name.lstrip("/"): cid for cid, (name, _) in COMMANDS.items()}
 MAX_LINES = 40
-AVATAR_URL = "https://raw.githubusercontent.com/ThomasBates-AZ/whoshere2/main/whoshere2/docs/chat-avatar.png"
 GREEN, RED, AMBER, YELLOW, GREY = "#1f7a3d", "#b42318", "#b45309", "#a16207", "#6b6b70"
 
 
@@ -212,10 +211,10 @@ def _card(title_html: str, sections: list[dict], settings: Settings, f, now=None
         out.append({"widgets": [{"buttonList": {"buttons": [
             {"text": "Open the board", "onClick": {"openLink": {"url": settings.board_url}}}]}}]})
     stamp = f["clock"](now or time.time())
-    return {"cardId": card_id, "card": {
-        "header": {"title": "Who's Here", "subtitle": f"As of {stamp}", "imageUrl": AVATAR_URL,
-                   "imageType": "CIRCLE", "imageAltText": "Who's Here"},
-        "sections": out}}
+    header = {"title": "Who's Here", "subtitle": f"As of {stamp}"}
+    if settings.chat_avatar_url:  # must be a public https image; leave unset for no image
+        header.update(imageUrl=settings.chat_avatar_url, imageType="CIRCLE", imageAltText="Who's Here")
+    return {"cardId": card_id, "card": {"header": header, "sections": out}}
 
 
 def _person_row(p, f, show_wifi: bool) -> dict:

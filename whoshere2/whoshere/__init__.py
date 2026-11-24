@@ -1,2 +1,2 @@
 """Who's Here? 2.0 - an automatic in/out board for UniFi networks."""
-__version__ = "3.5.0"
+__version__ = "3.6.0"

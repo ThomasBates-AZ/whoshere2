@@ -7,6 +7,15 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "3.6.0",
+        "date": "2026-11-24",
+        "changes": [
+            "The repository is now private",
+            "The icon at the top of Google Chat answers is now a setting (CHAT_AVATAR_URL), since GitHub links don't work for a private repository; with none set, answers simply have no icon",
+            "README: how to give Portainer a read-only GitHub token for the private repository",
+        ],
+    },
+    {
         "version": "3.5.0",
         "date": "2026-11-24",
         "changes": [
