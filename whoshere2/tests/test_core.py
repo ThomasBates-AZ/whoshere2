@@ -874,7 +874,7 @@ def test_chat_cards_one_row_per_person(db, monkeypatch, tmp_path):
     for cid, cmd in ((1, "/whoshere"), (2, "/allclear")):
         r = reply_for(parse_event(slash_event(cid, cmd, "")), db, s, now=now)
         card = r.card["card"]
-        assert card["header"]["title"] == "Who's Here"
+        assert card["header"]["title"] == "Who's Here" and "imageUrl" not in card["header"]
         assert "Not clear — 3 people on campus" in card["sections"][0]["widgets"][0]["textParagraph"]["text"]
         rows = [w["decoratedText"] for sec in card["sections"] for w in sec["widgets"] if "decoratedText" in w]
         assert len(rows) == 3  # one row each
@@ -889,3 +889,13 @@ def test_chat_cards_one_row_per_person(db, monkeypatch, tmp_path):
     r = reply_for(parse_event(slash_event(1, "/whoshere taylor", " taylor")), db, s, now=now)
     rows = [w["decoratedText"] for sec in r.card["card"]["sections"] for w in sec["widgets"] if "decoratedText" in w]
     assert len(rows) == 1 and "Taylor Brooks" in rows[0]["text"] and "Here" in rows[0]["text"]
+
+
+def test_chat_card_icon_setting(db, monkeypatch, tmp_path):
+    from whoshere.chatbot import parse_event, reply_for
+    from mock_google import slash_event
+    s = _chat_settings(monkeypatch, tmp_path, CHAT_AVATAR_URL="https://www.example.org/whoshere.png")
+    add_person(db, "Alex Rivera", PHONE)
+    presence.apply_snapshot(db, snap({PHONE: AP1}, time.time()), GRACE)
+    header = reply_for(parse_event(slash_event(1, "/whoshere", "")), db, s).card["card"]["header"]
+    assert header["imageUrl"] == "https://www.example.org/whoshere.png" and header["imageType"] == "CIRCLE"
