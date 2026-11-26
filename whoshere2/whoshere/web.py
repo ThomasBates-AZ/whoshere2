@@ -32,6 +32,8 @@ from . import chatbot
 from .timefmt import make_filters
 from .macutil import is_randomized, normalize_mac
 from .poller import Poller
+from .apns import PushSetupError, WatchPush
+from .apns import check_key as check_apns_key
 from .unifi import UniFiError, find_client_by_ip, make_client
 
 log = logging.getLogger("whoshere.web")
@@ -44,7 +46,8 @@ HERE = Path(__file__).parent
 
 def create_app(settings: Settings, db: Database | None = None, start_poller: bool = True) -> Starlette:
     db = db or Database(settings.db_path)
-    poller = Poller(settings, db)
+    push = WatchPush(settings, db)
+    poller = Poller(settings, db, push=push)
     chat = ChatBridge(settings, db)
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.filters.update(make_filters(settings.timezone))
@@ -78,6 +81,15 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     def can_view(request: Request) -> bool:
         return not settings.view_password or role(request) in ("viewer", "admin")
 
+    def api_allowed(request: Request) -> bool:
+        """Apps (the watch) send API_TOKEN as a bearer token; browsers use the normal sign-in."""
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            return bool(settings.api_token) and hmac.compare_digest(auth[7:].strip(), settings.api_token)
+        if settings.api_token:  # with a token set, the API needs it (or a signed-in browser)
+            return role(request) in ("viewer", "admin")
+        return can_view(request)
+
     def is_admin(request: Request) -> bool:
         return bool(settings.admin_password) and role(request) == "admin"
 
@@ -99,7 +111,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         return render(request, "board.html", b=state, refresh=30, live=True)
 
     async def api_status(request: Request):
-        if not can_view(request):
+        if not api_allowed(request):
             return JSONResponse({"error": "login required"}, status_code=401)
         state = presence.board(db, settings.stale_after)
         return JSONResponse({
@@ -111,7 +123,28 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
                        for p in state["people"]],
             "last_success": state["last_success"],
             "last_error": state["last_error"],
+            "generated_at": state["generated_at"],
+            "stale_after": settings.stale_after,
         })
+
+    async def api_push(request: Request):
+        """The watch app registers (or removes) its APNs device token here."""
+        if request.path_params["action"] not in ("register", "unregister"):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        if not api_allowed(request):
+            return JSONResponse({"error": "login required"}, status_code=401)
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "expected JSON"}, status_code=400)
+        token = str(body.get("token", "")).strip().lower() if isinstance(body, dict) else ""
+        if not (16 <= len(token) <= 200) or any(c not in "0123456789abcdef" for c in token):
+            return JSONResponse({"error": "token must be the device token in hex"}, status_code=400)
+        if request.path_params["action"] == "unregister":
+            await asyncio.to_thread(push.unregister, token)
+        else:
+            await asyncio.to_thread(push.register, token, str(body.get("name", "")).strip())
+        return JSONResponse({"ok": True, "push_enabled": push.enabled})
 
     async def manifest(request: Request):
         """Lets phones add the board to the home screen as an app."""
@@ -613,6 +646,54 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         return render(request, "chat.html", chat=chat, key_email=key_email, key_error=key_error,
                       commands=sorted(chatbot.COMMANDS.items()), s=settings)
 
+    # ----- admin: Apple Watch notifications
+
+    async def watch_page(request: Request):
+        if (r := admin_guard(request)):
+            return r
+        if request.method == "POST":
+            form = await checked_form(request)
+            if form is None:
+                flash(request, "Your session expired; please try again.", "error")
+                return back("/admin/watch")
+            action = form.get("action")
+            if action == "upload":
+                upload = form.get("key")
+                raw = (await upload.read()) if upload is not None and hasattr(upload, "read") else b""
+                try:
+                    key = check_apns_key(raw.decode("utf-8-sig", errors="replace"))
+                except PushSetupError as e:
+                    flash(request, str(e), "error")
+                    return back("/admin/watch")
+                path = settings.apns_key_file
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")
+                tmp.write_text(key)
+                try:
+                    tmp.chmod(0o600)
+                except OSError:
+                    pass
+                tmp.replace(path)
+                push._jwt = None
+                flash(request, "APNs key saved.")
+            elif action == "remove-key":
+                settings.apns_key_file.unlink(missing_ok=True)
+                push._jwt = None
+                flash(request, "APNs key removed. Watches won't get notifications until you upload one.")
+            elif action == "forget":
+                await asyncio.to_thread(push.unregister, str(form.get("token", "")))
+                flash(request, "Watch removed. It registers again the next time its app opens.")
+            elif action == "test":
+                try:
+                    result = await asyncio.to_thread(
+                        push.send, "Test from Who's Here", "Notifications are working.", "test")
+                    flash(request, result.summary(), "error" if result.failed and not result.sent else "ok")
+                except PushSetupError as e:
+                    flash(request, str(e), "error")
+            return back("/admin/watch")
+        watches = db.all("SELECT * FROM push_tokens ORDER BY last_seen DESC")
+        return render(request, "watch.html", push=push, watches=watches, s=settings)
+
     # ----- help and cheat sheets
 
     def help_context(request: Request) -> dict:
@@ -667,6 +748,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         Route("/", board_page),
         Route("/history", history_page),
         Route("/api/status", api_status),
+        Route("/api/push/{action:str}", api_push, methods=["POST"]),
         Route("/healthz", healthz),
         Route("/manifest.webmanifest", manifest),
         Route("/register", register_page, methods=["GET", "POST"]),
@@ -684,6 +766,7 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
         Route("/help", help_page),
         Route("/help/sheet/{sheet}", cheat_sheet),
         Route("/admin/chat", chat_page, methods=["GET", "POST"]),
+        Route("/admin/watch", watch_page, methods=["GET", "POST"]),
         Mount("/static", StaticFiles(directory=str(HERE / "static")), name="static"),
     ]
     middleware = [Middleware(SessionMiddleware, secret_key=settings.secret_key,
@@ -693,4 +776,5 @@ def create_app(settings: Settings, db: Database | None = None, start_poller: boo
     app.state.db = db
     app.state.poller = poller
     app.state.chat = chat
+    app.state.push = push
     return app

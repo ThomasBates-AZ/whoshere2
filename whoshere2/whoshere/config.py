@@ -60,6 +60,15 @@ class Settings:
     chat_avatar_url: str           # public https image for the card header; empty = no image
     board_url: str                 # link added to Chat replies, e.g. http://whoshere.local:8085
 
+    # Apple Watch app (all optional; push is on when the key and the three APNs settings are set)
+    api_token: str                 # if set, apps can read /api/* with "Authorization: Bearer <token>"
+    apns_key_file: Path            # the .p8 key, uploaded on the Apple Watch admin page
+    apns_key_id: str
+    apns_team_id: str
+    apns_bundle_id: str            # the watch app's bundle ID
+    apns_sandbox: bool             # true for builds installed from Xcode, false for TestFlight/App Store
+    watch_push: tuple[str, ...]    # which changes to announce: "clear", "stale"
+
     # Web
     title: str
     admin_password: str
@@ -122,6 +131,13 @@ class Settings:
             chat_private_replies=_bool("GOOGLE_CHAT_PRIVATE_REPLIES", True),
             board_url=_str("BOARD_URL").rstrip("/"),
             chat_avatar_url=_str("CHAT_AVATAR_URL"),
+            api_token=_str("API_TOKEN"),
+            apns_key_file=Path(_str("APNS_KEY_FILE") or str(data_dir / "apns-key.p8")),
+            apns_key_id=_str("APNS_KEY_ID"),
+            apns_team_id=_str("APNS_TEAM_ID"),
+            apns_bundle_id=_str("APNS_BUNDLE_ID"),
+            apns_sandbox=_bool("APNS_SANDBOX", True),
+            watch_push=_watch_push(),
             wifi_networks=wifi_networks,
             title=_str("SITE_TITLE", "Who's Here?") or "Who's Here?",
             admin_password=os.environ.get("ADMIN_PASSWORD", ""),
@@ -130,6 +146,17 @@ class Settings:
             timezone=tz,
             data_dir=data_dir,
         )
+
+
+def _watch_push() -> tuple[str, ...]:
+    raw = _str("WATCH_PUSH", "clear").lower()
+    if raw in ("", "none", "off", "false"):
+        return ()
+    events = tuple(dict.fromkeys(e.strip() for e in raw.split(",") if e.strip()))
+    bad = [e for e in events if e not in ("clear", "stale")]
+    if bad:
+        raise SystemExit(f"WATCH_PUSH can contain clear and stale (comma-separated), not {', '.join(bad)}")
+    return events
 
 
 def _chat_subscription() -> str:

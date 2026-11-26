@@ -7,6 +7,16 @@ major version (2.x -> 3.0) for big ones.
 
 CHANGELOG = [
     {
+        "version": "3.7.0",
+        "date": "2026-11-26",
+        "changes": [
+            "Apple Watch app support: watches can register for notifications, and the server taps them through Apple's push service when it becomes all clear to arm (and, if you want, when the board can't confirm)",
+            "New Apple Watch admin page: upload the APNs key, see which watches are registered, and send a test notification",
+            "Optional API_TOKEN setting: when set, /api/status and the new /api/push need it as a bearer token",
+            "/api/status now also says when it was generated and how long until data counts as stale",
+        ],
+    },
+    {
         "version": "3.6.0",
         "date": "2026-11-24",
         "changes": [

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Apple Watch · {{ title }}{% endblock %}
+{% block content %}
+<h1>Apple Watch</h1>
+<p class="muted">The Who's Here watch app shows the board on your wrist and can tap you when it's all clear to arm. Notifications go out through Apple's push service, so the server only makes outgoing connections to Apple; nothing has to be opened to the internet. Setup steps are in the README under "Apple Watch".</p>
+
+<section class="card">
+  <h2>Notifications</h2>
+  {% if not push.enabled %}
+    <div class="flash warn">Off. Still needed: {{ push.missing()|join(', ') }}.</div>
+  {% elif push.last_error %}
+    <div class="flash error">Last send had a problem: {{ push.last_error }}</div>
+  {% elif push.last_sent_at %}
+    <div class="flash ok">On. Last notification {{ push.last_sent_at|ago }}: {{ push.last_summary }}</div>
+  {% else %}
+    <div class="flash ok">On. Nothing sent since the app started.</div>
+  {% endif %}
+  <table class="list kv">
+    <tr><th>Sends a notification when</th><td>
+      {% if not s.watch_push %}Never (WATCH_PUSH=none){% else %}
+      {% for e in s.watch_push %}{{ {'clear': 'it becomes all clear to arm', 'stale': "the board can't confirm (UniFi stops answering)"}[e] }}{% if not loop.last %}; {% endif %}{% endfor %}
+      {% endif %}</td></tr>
+    <tr><th>Key ID</th><td class="mono">{{ s.apns_key_id or 'not set (APNS_KEY_ID)' }}</td></tr>
+    <tr><th>Team ID</th><td class="mono">{{ s.apns_team_id or 'not set (APNS_TEAM_ID)' }}</td></tr>
+    <tr><th>Watch app bundle ID</th><td class="mono">{{ s.apns_bundle_id or 'not set (APNS_BUNDLE_ID)' }}</td></tr>
+    <tr><th>Apple server</th><td>{{ 'Development (builds installed from Xcode)' if s.apns_sandbox else 'Production (TestFlight and App Store builds)' }} <span class="muted">APNS_SANDBOX={{ 'true' if s.apns_sandbox else 'false' }}</span></td></tr>
+    <tr><th>App access</th><td>{{ 'Needs API_TOKEN' if s.api_token else ('Needs the view password' if s.view_password else 'Open on your network, like the board') }}</td></tr>
+  </table>
+  {% if push.enabled and watches %}
+  <form method="post" style="margin-top:.75rem">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="test">
+    <button class="secondary">Send a test notification</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>APNs key</h2>
+  <p>Upload the <code>.p8</code> key from the Apple Developer site (Certificates, Identifiers &amp; Profiles → Keys, with Apple Push Notifications service turned on). It's stored in the app's data volume, readable only by the app.</p>
+  <p>{% if push.key_present %}<strong>A key is saved.</strong>{% else %}<span class="muted">No key uploaded.</span>{% endif %}</p>
+  <form method="post" enctype="multipart/form-data" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="upload">
+    <label for="apns-key" class="muted">Key file</label>
+    <input id="apns-key" type="file" name="key" accept=".p8" required>
+    <button>Upload key</button>
+  </form>
+  {% if push.key_present %}
+  <form method="post" style="margin-top:.75rem" onsubmit="return confirm('Remove the APNs key?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="remove-key">
+    <button class="danger">Remove key</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Watches</h2>
+  {% if not watches %}
+    <p class="muted">No watches yet. A watch shows up here the first time the app opens and allows notifications.</p>
+  {% else %}
+  <table class="list">
+    <thead><tr><th>Watch</th><th>Last opened</th><th>Last notification</th><th></th></tr></thead>
+    {% for w in watches %}
+    <tr>
+      <td>{{ w.name or 'Apple Watch' }}{% if w.last_error %}<div class="note warn-text">{{ w.last_error }}</div>{% endif %}</td>
+      <td>{{ w.last_seen|ago }}</td>
+      <td>{{ w.last_push|ago if w.last_push else '—' }}</td>
+      <td><form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="forget"><input type="hidden" name="token" value="{{ w.token }}"><button class="secondary">Remove</button></form></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+{% endblock %}
