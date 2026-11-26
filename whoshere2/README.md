@@ -221,6 +221,25 @@ The **Google Chat** admin page shows what's wrong in plain words:
 - **"Subscription … not found"**: check `GOOGLE_CHAT_SUBSCRIPTION` against the full name shown in Pub/Sub.
 - **Connected, but the app never answers**: Chat can't publish to the topic. Recheck the **Pub/Sub Publisher** grant in step 2, and the topic name in the Chat app's connection settings.
 
+## Apple Watch
+
+The watch app in [`watch/`](../watch) shows the board on your wrist: the all-clear answer, who's on campus and where, and complications for the watch face. It can also tap you when it becomes **all clear to arm**. It never shows Wi-Fi network names.
+
+- **Reading the board:** the watch connects to Who's Here directly, so it has to be able to reach the server: on the campus network, or from outside through a VPN (UniFi Teleport, WireGuard). Off the network it shows its last answer and says it can't reach the board.
+- **Notifications:** sent from the server through Apple's push service, so they arrive anywhere the watch has a connection. The server only makes outgoing connections to Apple.
+
+Building the app needs a Mac with Xcode and a paid Apple Developer Program membership (push notifications aren't available to free accounts). The steps are in [`watch/README.md`](../watch/README.md). Then, on the server:
+
+1. On [developer.apple.com](https://developer.apple.com/account/resources/authkeys/list) → **Certificates, Identifiers & Profiles → Keys**, click **+**, name it `Who's Here push`, tick **Apple Push Notifications service (APNs)**, and download the `.p8` file. Apple only lets you download it once. Note the **Key ID** shown next to it, and your **Team ID** (top right, or under **Membership**).
+2. Add to the stack's environment variables and redeploy:
+   - `APNS_KEY_ID` and `APNS_TEAM_ID` from step 1
+   - `APNS_BUNDLE_ID`: the watch app's bundle ID (for example `org.example.whoshere.watchkitapp`)
+   - `APNS_SANDBOX=true` while you install the app from Xcode; `false` for TestFlight or App Store builds
+3. **Admin → Apple Watch**: upload the `.p8` key.
+4. Open the app on the watch, enter the board's address in its Settings, and allow notifications. The watch appears under **Watches** on the admin page; click **Send a test notification**.
+
+`WATCH_PUSH` chooses what gets announced: `clear` (default), `clear,stale` to also hear when the board can't confirm because UniFi stopped answering, or `none`. To keep other devices on your network from reading `/api/status`, set `API_TOKEN` and enter the same token in the watch app's Settings.
+
 ## How it decides
 
 - Someone is **Here** as soon as any of their devices is connected, and their location is the access point it's connected to. If they have both a phone and a laptop, the phone (wireless) wins.
@@ -263,10 +282,15 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 | `SHOW_WIFI_NETWORK` | `true` | Show which Wi-Fi network each person and device is on |
 | `STAFF_WIFI_NAME` | names in `WIFI_NETWORKS` | Override the network name used in the "Add my phone" instructions |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Reverse proxies whose `X-Forwarded-For` header is trusted |
+| `APNS_KEY_ID` / `APNS_TEAM_ID` | | Apple push key ID and team ID (see [Apple Watch](#apple-watch)) |
+| `APNS_BUNDLE_ID` | | The watch app's bundle ID |
+| `APNS_SANDBOX` | `true` | `true` for builds installed from Xcode, `false` for TestFlight/App Store |
+| `WATCH_PUSH` | `clear` | When to notify watches: `clear`, `stale`, both (`clear,stale`) or `none` |
+| `API_TOKEN` | | If set, `/api/status` and `/api/push` need `Authorization: Bearer <token>` |
 
 ## JSON API
 
-`GET /api/status` returns the board as JSON (uses `VIEW_PASSWORD` if set), handy for a wall display, Home Assistant, or an alarm-panel script:
+`GET /api/status` returns the board as JSON (uses `VIEW_PASSWORD` if set, or `API_TOKEN` as a bearer token if that's set), handy for a wall display, Home Assistant, or an alarm-panel script:
 
 ```json
 {
@@ -279,6 +303,8 @@ All settings are environment variables in `.env`; see [`.env.example`](.env.exam
 ```
 
 `verdict` is `clear`, `occupied`, or `stale`. Treat anything other than `clear` as "don't arm". `GET /healthz` is for container health checks.
+
+`POST /api/push/register` and `POST /api/push/unregister` take `{"token": "<APNs device token in hex>", "name": "Thomas's Watch"}`; the watch app calls them. Same access rules as `/api/status`.
 
 ## Command line
 

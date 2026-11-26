@@ -6,6 +6,7 @@ import logging
 import time
 
 from . import presence
+from .apns import WatchPush
 from .config import Settings
 from .db import Database
 from .unifi import UniFiError, make_client
@@ -16,9 +17,10 @@ PRUNE_EVERY = 3600  # seconds
 
 
 class Poller:
-    def __init__(self, settings: Settings, db: Database):
+    def __init__(self, settings: Settings, db: Database, push: WatchPush | None = None):
         self.settings = settings
         self.db = db
+        self.push = push
         self._client = None
         self._wake = asyncio.Event()
         self._lock = asyncio.Lock()
@@ -28,6 +30,14 @@ class Poller:
 
     def poll_once(self) -> None:
         """Blocking; run in a worker thread."""
+        self._poll()
+        if self.push is not None:
+            try:
+                self.push.check()
+            except Exception:  # a push problem must never stop polling
+                log.exception("Watch push check failed")
+
+    def _poll(self) -> None:
         try:
             if self._client is None:
                 self._client = make_client(self.settings)

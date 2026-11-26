@@ -5,7 +5,7 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Columns added after the first release: (table, column, type). Added to existing databases on start.
 ADDED_COLUMNS = [
@@ -77,6 +77,16 @@ CREATE TABLE IF NOT EXISTS poll_status (
     client_count INTEGER
 );
 INSERT OR IGNORE INTO poll_status (id) VALUES (1);
+
+-- Apple Watches that asked for notifications (their APNs device tokens).
+CREATE TABLE IF NOT EXISTS push_tokens (
+    token      TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    last_seen  REAL,
+    last_push  REAL,
+    last_error TEXT
+);
 """
 
 
